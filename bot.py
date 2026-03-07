@@ -27,6 +27,42 @@ if not TOKEN:
     print("❌ ERROR: BOT_TOKEN not found!")
     exit(1)
 
+# ==================== FIX FOR CONFLICT ERROR ====================
+def clear_telegram_webhook():
+    """Clear any existing webhook/sessions to prevent conflict"""
+    try:
+        webhook_url = f"https://api.telegram.org/bot{TOKEN}/deleteWebhook"
+        response = requests.post(webhook_url)
+        print(f"✅ Webhook cleared: {response.json()}")
+        
+        get_updates_url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
+        requests.post(get_updates_url, json={"offset": -1, "timeout": 0})
+        print("✅ Pending updates cleared")
+        
+        time.sleep(2)
+    except Exception as e:
+        print(f"⚠️ Warning while clearing webhook: {e}")
+
+# Call this before starting the bot
+clear_telegram_webhook()
+# =============================================================
+
+# Enable logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# User session storage
+user_sessions = {}
+rate_limits = defaultdict(list)
+
+# Stats tracking
+total_checks = 0
+valid_accounts = 0
+invalid_accounts = 0
+
 # ==================== MULTI-LANGUAGE SUPPORT ====================
 
 LANGUAGES = {
@@ -64,6 +100,8 @@ LANGUAGES = {
         'rate_limit': 'Rate limit exceeded',
         'wrong_format': 'Please upload a .txt file',
         'no_cookies': 'No Netflix cookies found',
+        'decoding': 'Decoding special characters',
+        'removing_emoji': 'Removing emoji',
     },
     'zh': {
         'name': '中文',
@@ -99,6 +137,8 @@ LANGUAGES = {
         'rate_limit': '请求过多，请稍后再试',
         'wrong_format': '请上传.txt文件',
         'no_cookies': '未找到Netflix cookies',
+        'decoding': '解码特殊字符',
+        'removing_emoji': '移除表情符号',
     },
     'km': {
         'name': 'ខ្មែរ',
@@ -134,51 +174,102 @@ LANGUAGES = {
         'rate_limit': 'សំណើច្រើនពេក សូមរង់ចាំ',
         'wrong_format': 'សូមផ្ញើឯកសារ .txt',
         'no_cookies': 'រកមិនឃើញ Netflix cookies ទេ',
+        'decoding': 'កំពុងឌិកូដតួអក្សរពិសេស',
+        'removing_emoji': 'កំពុងដកអេម៉ូជីចេញ',
     }
 }
 
-# ==================== FIX FOR CONFLICT ERROR ====================
-def clear_telegram_webhook():
-    """Clear any existing webhook/sessions to prevent conflict"""
-    try:
-        webhook_url = f"https://api.telegram.org/bot{TOKEN}/deleteWebhook"
-        response = requests.post(webhook_url)
-        print(f"✅ Webhook cleared: {response.json()}")
-        
-        get_updates_url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-        requests.post(get_updates_url, json={"offset": -1, "timeout": 0})
-        print("✅ Pending updates cleared")
-        
-        time.sleep(2)
-    except Exception as e:
-        print(f"⚠️ Warning while clearing webhook: {e}")
+# ==================== UNIVERSAL MULTI-FORMAT PARSER ====================
 
-# Call this before starting the bot
-clear_telegram_webhook()
-# =============================================================
+def decode_special_chars(text):
+    """Decode special characters like \x20, \x28, \x29 into normal text"""
+    if not text:
+        return text
+    
+    # Replace common encoded characters
+    replacements = {
+        r'\x20': ' ',    # space
+        r'\x28': '(',    # open parenthesis
+        r'\x29': ')',    # close parenthesis
+        r'\x26': '&',    # ampersand
+        r'\x3D': '=',    # equals sign
+        r'\x2C': ',',    # comma
+        r'\x2E': '.',    # period
+        r'\x2D': '-',    # hyphen
+        r'\x5F': '_',    # underscore
+        r'\x2F': '/',    # forward slash
+        r'\x5C': '\\',   # backslash
+        r'\x3A': ':',    # colon
+        r'\x3B': ';',    # semicolon
+        r'\x40': '@',    # at symbol
+        r'\x23': '#',    # hash
+        r'\x24': '$',    # dollar
+        r'\x25': '%',    # percent
+        r'\x2B': '+',    # plus
+        r'\x3C': '<',    # less than
+        r'\x3E': '>',    # greater than
+        r'\x7B': '{',    # open brace
+        r'\x7D': '}',    # close brace
+        r'\x5B': '[',    # open bracket
+        r'\x5D': ']',    # close bracket
+        r'\x7C': '|',    # pipe
+        r'\x60': '`',    # backtick
+        r'\x27': "'",    # single quote
+        r'\x22': '"',    # double quote
+    }
+    
+    for encoded, decoded in replacements.items():
+        text = text.replace(encoded, decoded)
+    
+    return text
 
-# Enable logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-# User session storage
-user_sessions = {}
-rate_limits = defaultdict(list)
-
-# Stats tracking
-total_checks = 0
-valid_accounts = 0
-invalid_accounts = 0
-
-# ==================== EXACT FORMAT PARSER ====================
+def remove_emoji(text):
+    """Remove emoji characters from text"""
+    if not text:
+        return text
+    
+    # This regex matches most emoji characters
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map symbols
+        u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        u"\U00002702-\U000027B0"  # dingbats
+        u"\U000024C2-\U0001F251"  # enclosed characters
+        u"\U0001F900-\U0001F9FF"  # supplemental symbols
+        u"\U0001FA70-\U0001FAFF"  # symbols and pictographs extended
+        u"\U00002600-\U000026FF"  # miscellaneous symbols
+        u"\U00002B50-\U00002B55"  # stars
+        u"\U0001F004-\U0001F0CF"  # playing cards
+        u"\U0001F170-\U0001F251"  # enclosed alphanumeric
+        u"\U0001F201-\U0001F21A"  # enclosed ideographic supplement
+        u"\U0001F232-\U0001F23B"  # enclosed ideographic supplement
+        u"\U0001F250-\U0001F251"  # enclosed ideographic supplement
+        u"\U0001F300-\U0001F5FF"  # symbols and pictographs
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F680-\U0001F6FF"  # transport and map symbols
+        u"\U0001F900-\U0001F9FF"  # supplemental symbols
+        u"\U0001FA70-\U0001FAFF"  # symbols and pictographs extended
+        u"\U00002600-\U000026FF"  # miscellaneous symbols
+        u"\U00002700-\U000027BF"  # dingbats
+        u"\U0001F1E6-\U0001F1FF"  # regional indicator symbols
+        "]+", flags=re.UNICODE)
+    
+    return emoji_pattern.sub(r'', text).strip()
 
 def parse_account_line(line):
     """
-    Parse a single line in the exact format:
-    email:password | Phone: number | Country: name | Cookie: NetflixId=...
+    Universal parser that handles multiple formats:
+    
+    Format A: email:password | Country = United States 🇺🇸 | Plan = Premium\x20\x28Extra\x20Member\x29 | NetflixCookies = NetflixId=...
+    Format B: email:password | Phone: +17604584487 | Country: United States | Cookie: NetflixId=...
+    
+    Supports:
+    - Both : and = as separators
+    - Cookie field can be "Cookie" or "NetflixCookies"
+    - Removes emoji from country field
+    - Decodes special characters like \x20, \x28, \x29
+    - Extracts email, password, cookie, and optional fields
     """
     try:
         line = line.strip()
@@ -186,6 +277,9 @@ def parse_account_line(line):
             return None
         
         account = {}
+        
+        # First, decode any special characters in the entire line
+        line = decode_special_chars(line)
         
         # Split by | to get each field
         fields = line.split('|')
@@ -200,21 +294,45 @@ def parse_account_line(line):
         # Parse remaining fields
         for field in fields[1:]:
             field = field.strip()
+            if not field:
+                continue
+            
+            # Try both : and = as separators
+            separator = None
             if ':' in field:
-                key, value = field.split(':', 1)
-                key = key.strip().lower()
-                value = value.strip()
-                
-                if 'phone' in key:
-                    account['phone'] = value
-                elif 'country' in key:
-                    account['country'] = value
-                elif 'cookie' in key:
-                    account['full_cookie'] = value
-                    # Extract NetflixId from cookie
-                    netflix_match = re.search(r'NetflixId=([^&\s]+)', value)
-                    if netflix_match:
-                        account['netflix_id'] = netflix_match.group(1).strip()
+                separator = ':'
+            elif '=' in field:
+                separator = '='
+            else:
+                continue
+            
+            key, value = field.split(separator, 1)
+            key = key.strip().lower()
+            value = value.strip()
+            
+            # Handle different field types
+            if 'country' in key:
+                # Remove emoji from country
+                account['country'] = remove_emoji(value)
+            
+            elif 'phone' in key:
+                account['phone'] = value
+            
+            elif 'plan' in key:
+                account['plan'] = value
+            
+            elif 'quality' in key or 'video' in key:
+                account['quality'] = value
+            
+            elif 'stream' in key or 'max' in key:
+                account['max_streams'] = value
+            
+            elif 'cookie' in key or 'netflixcookies' in key or 'netflixcookiess' in key:
+                account['full_cookie'] = value
+                # Extract NetflixId from cookie
+                netflix_match = re.search(r'NetflixId=([^&\s]+)', value)
+                if netflix_match:
+                    account['netflix_id'] = netflix_match.group(1).strip()
         
         # Validate we have the minimum required fields
         if 'netflix_id' not in account:
@@ -223,6 +341,11 @@ def parse_account_line(line):
         
         if 'email' not in account:
             account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
+        
+        # Clean up any remaining encoded characters in all fields
+        for key, value in account.items():
+            if isinstance(value, str):
+                account[key] = decode_special_chars(value)
         
         logger.info(f"✅ Parsed account: {account['email']}")
         return account
@@ -399,17 +522,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🌟 **{lang['welcome']} {user.first_name}!** 🌟
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📤 **Send a .txt file** with accounts in this format:
+📤 **Send a .txt file** with accounts in any format:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`email:password | Phone: XXX | Country: XXX | Cookie: NetflixId=...`
+✅ Supports both `:` and `=` separators
+✅ Removes emoji from country names
+✅ Decodes special characters like `\x20`
+✅ Recognizes `Cookie` or `NetflixCookies`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ **Features:**
 ✅ Multi-language support (EN/中文/ខ្មែរ)
+✅ Universal format parser
 ✅ Professional account validation
-✅ Beautiful premium output
 ✅ Real-time progress tracking
-✅ Detailed statistics
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Commands:**
@@ -442,23 +567,25 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 1️⃣ **Prepare your .txt file**
    • One account per line
-   • Use | to separate fields
-   • Must include Cookie: NetflixId=...
-
-2️⃣ **Format:**
-`email:password | Phone: number | Country: name | Cookie: NetflixId=...`
+   • Use `|` to separate fields
+   • Must include Cookie with NetflixId=
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📝 **Example / 例子 / ឧទាហរណ៍:**
+📝 **SUPPORTED FORMATS:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`user@gmail.com:pass123 | Phone: 123-456-7890 | Country: Philippines | Cookie: NetflixId=v%3D3%26ct%3D...`
+
+**Format A (with =):**
+`email:password | Country = United States 🇺🇸 | Plan = Premium\x20\x28Extra\x20Member\x29 | NetflixCookies = NetflixId=...`
+
+**Format B (with :):**
+`email:password | Phone: +1234567890 | Country: United States | Cookie: NetflixId=...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **Error Messages / 错误信息 / សារកំហុស:**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• `INVALID_RESPONSE_FORMAT` - Cookie expired/invalid
-• `SERVER_ERROR` - Netflix server issue
-• `TIMEOUT` - Request timeout
+🔧 **What the bot does:**
+• Removes 🇺🇸 emoji from country
+• Decodes `\x20\x28Extra\x20Member\x29` → ` (Extra Member)`
+• Finds cookie in any field name
+• Extracts email, password, and NetflixId
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
@@ -587,7 +714,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         error_counts = defaultdict(int)
         
         for i, line in enumerate(accounts, 1):
-            # Parse the line
+            # Parse the line with universal parser
             account = parse_account_line(line)
             
             if not account:
@@ -638,6 +765,8 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     details.append(f"📞 **{lang['phone']}:** `{account['phone']}`")
                 if account.get('plan'):
                     details.append(f"📺 **{lang['plan']}:** `{account['plan']}`")
+                if account.get('quality'):
+                    details.append(f"🎬 **{lang['quality']}:** `{account['quality']}`")
                 
                 details_str = '\n'.join(details) if details else ''
                 
@@ -763,6 +892,7 @@ async def run_bot():
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
     print("🌐 Languages: English, 中文, ខ្មែរ")
+    print("🔄 Universal Parser: Supports multiple formats")
     print("🎨 Beautiful Premium Output")
     print("=" * 60)
     
