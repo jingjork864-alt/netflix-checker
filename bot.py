@@ -27,6 +27,29 @@ if not TOKEN:
     print("❌ ERROR: BOT_TOKEN not found!")
     exit(1)
 
+# ==================== FIX FOR CONFLICT ERROR ====================
+def clear_telegram_webhook():
+    """Clear any existing webhook/sessions to prevent conflict"""
+    try:
+        # First, try to delete any webhook
+        webhook_url = f"https://api.telegram.org/bot{TOKEN}/deleteWebhook"
+        response = requests.post(webhook_url)
+        print(f"✅ Webhook cleared: {response.json()}")
+        
+        # Also try to get updates to clear any pending connections
+        get_updates_url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
+        requests.post(get_updates_url, json={"offset": -1, "timeout": 0})
+        print("✅ Pending updates cleared")
+        
+        # Wait a moment for Telegram to process
+        time.sleep(2)
+    except Exception as e:
+        print(f"⚠️ Warning while clearing webhook: {e}")
+
+# Call this before starting the bot
+clear_telegram_webhook()
+# =============================================================
+
 # Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -153,7 +176,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     welcome = f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎬 **NETFLIX ACCOUNT CHECKER BOT** 🎬
+🎬 **NETFLIX ACCOUNT CHECKER PRO** 🎬
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 👋 **Hello {user.first_name}!**
@@ -365,41 +388,25 @@ Please upload a `.txt` file.
         )
         
         # Process each line
-        results = []
         valid_count = 0
         invalid_count = 0
+        valid_accounts_found = []  # Store all valid accounts
         
         for i, line in enumerate(valid_lines, 1):
             # Parse account
             account = parse_account_line(line)
             if not account or 'netflix_id' not in account:
                 invalid_count += 1
-                await update.message.reply_text(
-                    f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ **PARSING FAILED**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📧 **Line #{i}**
-❌ Could not extract Netflix ID
-
-💡 **Tip:** Make sure the line contains `NetflixCookies = NetflixId=...`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                    """,
-                    parse_mode='Markdown'
-                )
                 continue
             
-            # Update progress every 3 accounts
+            # Calculate progress
+            progress = i / len(valid_lines)
+            bar_length = 15
+            filled = int(bar_length * progress)
+            bar = "█" * filled + "░" * (bar_length - filled)
+            
+            # Update progress every few accounts
             if i % 3 == 0 or i == len(valid_lines):
-                progress = i / len(valid_lines)
-                bar_length = 15
-                filled = int(bar_length * progress)
-                bar = "█" * filled + "░" * (bar_length - filled)
-                
                 await status_msg.edit_text(
                     f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -411,7 +418,7 @@ Please upload a `.txt` file.
 `{bar}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ **Valid:** `{valid_count}`
+✅ **Valid Found:** `{valid_count}`
 ❌ **Invalid:** `{invalid_count}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -431,89 +438,25 @@ Please upload a `.txt` file.
             if result.get('success'):
                 valid_count += 1
                 valid_accounts += 1
-                
-                # PREMIUM VALID ACCOUNT OUTPUT
-                premium_msg = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ **ACCOUNT VALIDATED** ✅
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📧 **LOGIN CREDENTIALS**
-• **Email:** `{email}`
-• **Password:** `{account.get('password', 'N/A')}`
-• **Status:** ✅ ACTIVE
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🌍 **ACCOUNT DETAILS**
-• **Country:** `{account.get('country', 'N/A')}`
-• **Plan:** `{account.get('plan', 'N/A')}`
-• **Quality:** `{account.get('video_quality', 'N/A')}`
-• **Max Streams:** `{account.get('max_streams', 'N/A')}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔗 **LOGIN LINK:**
-`{result['login_url']}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ *Link expires after some time - use it now!*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                """
-                
-                keyboard = [[InlineKeyboardButton("🎬 LAUNCH NETFLIX", url=result['login_url'])]]
-                
-                await update.message.reply_text(
-                    premium_msg,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='Markdown'
-                )
-                
+                # Store valid account with all details
+                valid_accounts_found.append({
+                    'email': email,
+                    'password': account.get('password', 'N/A'),
+                    'login_url': result['login_url'],
+                    'country': account.get('country', 'N/A'),
+                    'plan': account.get('plan', 'N/A'),
+                    'quality': account.get('video_quality', 'N/A'),
+                    'streams': account.get('max_streams', 'N/A')
+                })
             else:
                 invalid_count += 1
                 invalid_accounts += 1
-                error_msg = result.get('error', 'Unknown error')
-                
-                # Premium error message
-                if 'SERVER_ERROR' in error_msg or '500' in error_msg:
-                    fail_msg = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ **ACCOUNT EXPIRED**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📧 **Email:** `{email}`
-❌ **Status:** INVALID/EXPIRED
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔍 **Reason:** Netflix ID has expired
-💡 **Solution:** Get a fresh Netflix cookie
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                    """
-                else:
-                    fail_msg = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ **CHECK FAILED**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📧 **Email:** `{email}`
-❌ **Error:** `{error_msg}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                    """
-                
-                await update.message.reply_text(fail_msg, parse_mode='Markdown')
             
             # Small delay to avoid rate limits
             await asyncio.sleep(0.5)
         
-        # PREMIUM FINAL SUMMARY
-        success_rate = valid_count/(valid_count+invalid_count)*100 if (valid_count+invalid_count) > 0 else 0
+        # PROFESSIONAL COMPLETION SCREEN
+        success_rate = valid_count/len(valid_lines)*100 if len(valid_lines) > 0 else 0
         
         # Create status message based on results
         if invalid_count == 0:
@@ -526,33 +469,109 @@ Please upload a `.txt` file.
             status_emoji = "❌ NO VALID ACCOUNTS"
             status_msg_text = "No valid accounts found"
         
-        summary = f"""
+        completion_text = f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {status_emoji}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📊 **FINAL STATISTICS**
-• **Total Processed:** `{valid_count + invalid_count}`
-• **✅ Valid:** `{valid_count}`
-• **❌ Invalid:** `{invalid_count}`
-• **📈 Success Rate:** `{success_rate:.1f}%`
+📊 **RESULTS SUMMARY**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 **File:** `{document.file_name}`
+📝 **Total Processed:** `{len(valid_lines)}`
+✅ **Valid Accounts:** `{valid_count}`
+❌ **Invalid:** `{invalid_count}`
+📈 **Success Rate:** `{success_rate:.1f}%`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📌 **SUMMARY**
-{status_msg_text}
-
+📌 **Sending {valid_count} valid account(s)...**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 **NEXT STEPS**
-• Use the login links above
-• Save valid accounts securely
-• Try fresh cookies for invalid ones
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """
         
-        await status_msg.edit_text(summary, parse_mode='Markdown')
+        await status_msg.edit_text(completion_text, parse_mode='Markdown')
+        
+        # Send ALL valid accounts AFTER scan is complete
+        if valid_accounts_found:
+            for idx, acc in enumerate(valid_accounts_found, 1):
+                premium_msg = f"""
+╔════════════════════════════════════════╗
+║     ✅ VALID ACCOUNT #{idx}/{valid_count} ✅     ║
+╚════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📧 **LOGIN CREDENTIALS**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• **Email:** `{acc['email']}`
+• **Password:** `{acc['password']}`
+• **Status:** `✅ ACTIVE`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌍 **ACCOUNT DETAILS**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• **Country:** `{acc['country']}`
+• **Plan:** `{acc['plan']}`
+• **Quality:** `{acc['quality']}`
+• **Max Streams:** `{acc['streams']}`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔗 **LOGIN LINK**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`{acc['login_url']}`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ *Link expires - use it now!*
+
+⚡ **Powered by {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                """
+                
+                keyboard = [[InlineKeyboardButton("🎬 LAUNCH NETFLIX", url=acc['login_url'])]]
+                
+                await update.message.reply_text(
+                    premium_msg,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
+            
+            # Send final summary with all accounts sent
+            final_summary = f"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📬 **ALL ACCOUNTS SENT** 📬
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ **Successfully sent {valid_count} valid account(s)**
+
+💡 **Check messages above for login links**
+
+⚡ **Powered by {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            """
+            await update.message.reply_text(final_summary, parse_mode='Markdown')
+            
+        else:
+            # No valid accounts found
+            await update.message.reply_text(
+                f"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ **NO VALID ACCOUNTS** ❌
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 **RESULT**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+No valid accounts were found in your file.
+
+💡 **Suggestions:**
+• Get fresh Netflix cookies
+• Check file format
+• Try again later
+
+⚡ **Powered by {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                """,
+                parse_mode='Markdown'
+            )
         
         # Store in session
         user_sessions[user_id] = {
@@ -571,12 +590,11 @@ Please upload a `.txt` file.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📄 **File:** `{document.file_name}`
-❌ **Error:** `{str(e)}`
+❌ **Error:** `{str(e)[:100]}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Please try again or contact support
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             """,
@@ -590,7 +608,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-# ==================== MAIN FUNCTION ====================
+# ==================== MAIN FUNCTION - FIXED FOR RAILWAY ====================
 
 async def run_bot():
     """Run the bot"""
@@ -602,12 +620,19 @@ async def run_bot():
     print(f"✅ Secret Key: {SECRET_KEY[:15]}...")
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
-    print("🤖 Bot is running... Press Ctrl+C to stop")
-    print("📝 Premium output formatting enabled")
+    print("🤖 Bot is starting...")
     print("=" * 60)
     
-    # Create application
-    app = Application.builder().token(TOKEN).build()
+    # Create application with custom settings to avoid conflicts
+    app = (
+        Application.builder()
+        .token(TOKEN)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(30)
+        .build()
+    )
     
     # Add handlers
     app.add_handler(CommandHandler("start", start))
@@ -619,16 +644,26 @@ async def run_bot():
     # File handler
     app.add_handler(MessageHandler(filters.Document.FileExtension("txt"), handle_file))
     
-    # Initialize and start
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-    
+    # Initialize and start with error handling
     try:
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(
+            drop_pending_updates=True,  # This is important!
+            allowed_updates=Update.ALL_TYPES
+        )
+        print("✅ Bot started successfully!")
+        print("=" * 60)
+        print("🤖 Bot is now running! Waiting for messages...")
+        print("=" * 60)
+        
+        # Keep running
         while True:
             await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        print("\n👋 Bot stopped by user")
+            
+    except Exception as e:
+        print(f"❌ Error in bot: {e}")
+        raise e
     finally:
         await app.updater.stop()
         await app.stop()
@@ -644,6 +679,11 @@ def main():
         print("\n👋 Bot stopped by user")
     except Exception as e:
         print(f"❌ Error: {e}")
+        # On error, try to clear webhook again
+        try:
+            clear_telegram_webhook()
+        except:
+            pass
 
 if __name__ == '__main__':
     main()
