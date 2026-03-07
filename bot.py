@@ -27,6 +27,116 @@ if not TOKEN:
     print("❌ ERROR: BOT_TOKEN not found!")
     exit(1)
 
+# ==================== MULTI-LANGUAGE SUPPORT ====================
+
+LANGUAGES = {
+    'en': {
+        'name': 'English',
+        'flag': '🇺🇸',
+        'welcome': 'Welcome',
+        'start': 'Start',
+        'help': 'Help',
+        'stats': 'Statistics',
+        'clear': 'Clear',
+        'language': 'Language',
+        'processing': 'Processing',
+        'valid': 'VALID',
+        'invalid': 'INVALID',
+        'email': 'Email',
+        'password': 'Password',
+        'country': 'Country',
+        'phone': 'Phone',
+        'plan': 'Plan',
+        'quality': 'Quality',
+        'streams': 'Max Streams',
+        'login_link': 'Login Link',
+        'launch': '🎬 LAUNCH NETFLIX',
+        'powered_by': 'Powered by',
+        'file_received': 'FILE RECEIVED',
+        'analyzing': 'ANALYZING FILE',
+        'complete': 'PROCESSING COMPLETE',
+        'results': 'RESULTS SUMMARY',
+        'valid_found': 'Valid Accounts Found',
+        'invalid_found': 'Invalid Accounts',
+        'success_rate': 'Success Rate',
+        'no_valid': 'No valid accounts found',
+        'error_occurred': 'ERROR OCCURRED',
+        'rate_limit': 'Rate limit exceeded',
+        'wrong_format': 'Please upload a .txt file',
+        'no_cookies': 'No Netflix cookies found',
+    },
+    'zh': {
+        'name': '中文',
+        'flag': '🇨🇳',
+        'welcome': '欢迎',
+        'start': '开始',
+        'help': '帮助',
+        'stats': '统计',
+        'clear': '清除',
+        'language': '语言',
+        'processing': '处理中',
+        'valid': '有效',
+        'invalid': '无效',
+        'email': '邮箱',
+        'password': '密码',
+        'country': '国家',
+        'phone': '电话',
+        'plan': '套餐',
+        'quality': '画质',
+        'streams': '最大流',
+        'login_link': '登录链接',
+        'launch': '🎬 启动NETFLIX',
+        'powered_by': '技术支持',
+        'file_received': '已接收文件',
+        'analyzing': '分析文件中',
+        'complete': '处理完成',
+        'results': '结果总结',
+        'valid_found': '有效账户',
+        'invalid_found': '无效账户',
+        'success_rate': '成功率',
+        'no_valid': '未找到有效账户',
+        'error_occurred': '发生错误',
+        'rate_limit': '请求过多，请稍后再试',
+        'wrong_format': '请上传.txt文件',
+        'no_cookies': '未找到Netflix cookies',
+    },
+    'km': {
+        'name': 'ខ្មែរ',
+        'flag': '🇰🇭',
+        'welcome': 'ស្វាគមន៍',
+        'start': 'ចាប់ផ្តើម',
+        'help': 'ជំនួយ',
+        'stats': 'ស្ថិតិ',
+        'clear': 'សម្អាត',
+        'language': 'ភាសា',
+        'processing': 'កំពុងដំណើរការ',
+        'valid': 'ត្រឹមត្រូវ',
+        'invalid': 'មិនត្រឹមត្រូវ',
+        'email': 'អ៊ីមែល',
+        'password': 'ពាក្យសម្ងាត់',
+        'country': 'ប្រទេស',
+        'phone': 'ទូរស័ព្ទ',
+        'plan': 'កញ្ចប់',
+        'quality': 'គុណភាព',
+        'streams': 'ស្ទ្រីមអតិបរមា',
+        'login_link': 'តំណចូល',
+        'launch': '🎬 ចូល NETFLIX',
+        'powered_by': 'ដំណើរការដោយ',
+        'file_received': 'បានទទួលឯកសារ',
+        'analyzing': 'កំពុងវិភាគឯកសារ',
+        'complete': 'ដំណើរការបានបញ្ចប់',
+        'results': 'សង្ខេបលទ្ធផល',
+        'valid_found': 'គណនីត្រឹមត្រូវ',
+        'invalid_found': 'គណនីមិនត្រឹមត្រូវ',
+        'success_rate': 'អត្រាជោគជ័យ',
+        'no_valid': 'រកមិនឃើញគណនីត្រឹមត្រូវទេ',
+        'error_occurred': 'មានបញ្ហា',
+        'rate_limit': 'សំណើច្រើនពេក សូមរង់ចាំ',
+        'wrong_format': 'សូមផ្ញើឯកសារ .txt',
+        'no_cookies': 'រកមិនឃើញ Netflix cookies ទេ',
+    }
+}
+
 # ==================== FIX FOR CONFLICT ERROR ====================
 def clear_telegram_webhook():
     """Clear any existing webhook/sessions to prevent conflict"""
@@ -221,88 +331,114 @@ async def check_with_your_api(netflix_id, email):
             "email": email
         }
 
-# ==================== TEST API COMMAND ====================
+# ==================== LANGUAGE SELECTION ====================
 
-async def test_api_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Test if YOUR API is working with a sample request"""
-    await update.message.reply_text("🔄 Testing YOUR API connection...")
+async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show language selection menu"""
+    keyboard = [
+        [
+            InlineKeyboardButton(f"{LANGUAGES['en']['flag']} English", callback_data='lang_en'),
+            InlineKeyboardButton(f"{LANGUAGES['zh']['flag']} 中文", callback_data='lang_zh'),
+        ],
+        [
+            InlineKeyboardButton(f"{LANGUAGES['km']['flag']} ខ្មែរ", callback_data='lang_km'),
+        ]
+    ]
     
-    # Use a test Netflix ID (this will likely fail, but that's fine - we just want to see the API response)
-    test_id = "test123"
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    result = await check_with_your_api(test_id, "test@example.com")
+    await update.message.reply_text(
+        "🌐 **Select your language / 选择语言 / ជ្រើសរើសភាសា**",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle language selection"""
+    query = update.callback_query
+    await query.answer()
     
-    if result.get('success'):
-        await update.message.reply_text(
-            f"✅ **YOUR API IS WORKING!**\n\n"
-            f"**API URL:** `{API_URL}`\n"
-            f"**Status:** Online\n\n"
-            f"**Response:** API returned a valid login link.",
-            parse_mode='Markdown'
-        )
-    else:
-        # Even if the test ID fails, the API might be working - we just want to see the response
-        error = result.get('error', 'Unknown')
-        error_code = result.get('error_code', 'UNKNOWN')
-        
-        await update.message.reply_text(
-            f"📡 **YOUR API RESPONDED**\n\n"
-            f"**API URL:** `{API_URL}`\n"
-            f"**Status:** Online\n"
-            f"**Response Code:** `{error_code}`\n"
-            f"**Message:** `{error}`\n\n"
-            f"✅ API is reachable! The test ID is intentionally invalid.",
-            parse_mode='Markdown'
-        )
+    user_id = query.from_user.id
+    lang_code = query.data.replace('lang_', '')
+    
+    # Store user's language preference
+    if user_id not in user_sessions:
+        user_sessions[user_id] = {}
+    user_sessions[user_id]['language'] = lang_code
+    
+    lang = LANGUAGES[lang_code]
+    
+    await query.edit_message_text(
+        f"✅ **{lang['flag']} {lang['name']} selected!**\n\n"
+        f"Use /start to begin.",
+        parse_mode='Markdown'
+    )
+
+def get_lang(user_id):
+    """Get user's selected language"""
+    if user_id in user_sessions and 'language' in user_sessions[user_id]:
+        return user_sessions[user_id]['language']
+    return 'en'  # Default to English
 
 # ==================== BOT COMMANDS ====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start command"""
+    """Start command with multi-language support"""
     user = update.effective_user
+    user_id = user.id
+    lang_code = get_lang(user_id)
+    lang = LANGUAGES[lang_code]
     
     welcome = f"""
-╔════════════════════════════════════════╗
-║     🎬 NETFLIX ACCOUNT CHECKER PRO 🎬  ║
-╚════════════════════════════════════════╝
+╔══════════════════════════════════════════╗
+║     🎬 **NETFLIX PREMIUM CHECKER** 🎬    ║
+║          {lang['flag']} {lang['name']} version          ║
+╚══════════════════════════════════════════╝
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👋 **Hello {user.first_name}!**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌟 **{lang['welcome']} {user.first_name}!** 🌟
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📤 **Send me a .txt file** with accounts in this format:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📤 **Send a .txt file** with accounts in this format:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`email:password | Phone: XXX | Country: XXX | Cookie: NetflixId=...`
 
-`email:password | Phone: number | Country: name | Cookie: NetflixId=...`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ **Features:**
+✅ Multi-language support (EN/中文/ខ្មែរ)
+✅ Professional account validation
+✅ Beautiful premium output
+✅ Real-time progress tracking
+✅ Detailed statistics
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 **Example:**
-`user@gmail.com:pass123 | Phone: 123-456-7890 | Country: Philippines | Cookie: NetflixId=v%3D3%26ct%3D...`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Commands:**
-/help - Instructions
-/testapi - Test YOUR API
-/stats - Statistics
-/clear - Reset session
+/help - {lang['help']} ℹ️
+/stats - {lang['stats']} 📊
+/language - {lang['language']} 🌐
+/clear - {lang['clear']} 🧹
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     """
     
     await update.message.reply_text(welcome, parse_mode='Markdown')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Help command"""
+    """Help command with multi-language support"""
+    user_id = update.effective_user.id
+    lang_code = get_lang(user_id)
+    lang = LANGUAGES[lang_code]
+    
     help_text = f"""
-╔════════════════════════════════════════╗
-║           🆘 HELP CENTER 🆘            ║
-╚════════════════════════════════════════╝
+╔══════════════════════════════════════════╗
+║            🆘 **{lang['help']}** 🆘            ║
+╚══════════════════════════════════════════╝
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 **HOW TO USE**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 **HOW TO USE / 使用方法 / របៀបប្រើ**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1️⃣ **Prepare your .txt file**
    • One account per line
@@ -312,55 +448,52 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 2️⃣ **Format:**
 `email:password | Phone: number | Country: name | Cookie: NetflixId=...`
 
-3️⃣ **Send the file to me**
-   • I'll check each account with YOUR API
-   • Valid accounts will be sent with login links
-   • Invalid accounts will show the reason
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 **Example / 例子 / ឧទាហរណ៍:**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`user@gmail.com:pass123 | Phone: 123-456-7890 | Country: Philippines | Cookie: NetflixId=v%3D3%26ct%3D...`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📝 **API Error Messages Explained:**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• `INVALID_RESPONSE_FORMAT` - Netflix ID is expired or invalid
-• `SERVER_ERROR` - Netflix server issue, try again later
-• `INVALID_NETFLIX_ID` - The Netflix ID doesn't work
-• `TIMEOUT` - API request timed out
-• `CONNECTION_ERROR` - Cannot reach API server
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 **Error Messages / 错误信息 / សារកំហុស:**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• `INVALID_RESPONSE_FORMAT` - Cookie expired/invalid
+• `SERVER_ERROR` - Netflix server issue
+• `TIMEOUT` - Request timeout
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⌨️ **COMMANDS:**
-/start - Welcome
-/testapi - Test YOUR API
-/stats - Statistics
-/clear - Clear session
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     """
+    
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show statistics"""
+    """Show statistics with multi-language support"""
     global total_checks, valid_accounts, invalid_accounts
+    user_id = update.effective_user.id
+    lang_code = get_lang(user_id)
+    lang = LANGUAGES[lang_code]
     
     success_rate = valid_accounts/total_checks*100 if total_checks > 0 else 0
     
     stats_text = f"""
-╔════════════════════════════════════════╗
-║         📊 GLOBAL STATISTICS 📊        ║
-╚════════════════════════════════════════╝
+╔══════════════════════════════════════════╗
+║        📊 **{lang['stats']}** 📊        ║
+╚══════════════════════════════════════════╝
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📈 **Performance:**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• **Total Checks:** `{total_checks}`
-• **✅ Valid:** `{valid_accounts}`
-• **❌ Invalid:** `{invalid_accounts}`
-• **📊 Success Rate:** `{success_rate:.1f}%`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📈 **{lang['results']}:**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• **{lang['valid_found']}:**
+  `{valid_accounts}`
+• **{lang['invalid_found']}:**
+  `{invalid_accounts}`
+• **{lang['success_rate']}:**
+  `{success_rate:.1f}%`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     """
     
     await update.message.reply_text(stats_text, parse_mode='Markdown')
@@ -368,28 +501,61 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Clear user session"""
     user_id = update.effective_user.id
+    lang_code = get_lang(user_id)
+    lang = LANGUAGES[lang_code]
+    
     if user_id in user_sessions:
-        del user_sessions[user_id]
-    await update.message.reply_text("✅ Session cleared. You can upload a new file.")
+        # Keep language preference but clear other data
+        lang_pref = user_sessions[user_id].get('language', 'en')
+        user_sessions[user_id] = {'language': lang_pref}
+    
+    await update.message.reply_text(
+        f"✅ **{lang['clear']}**\n\nYou can now upload a new file.",
+        parse_mode='Markdown'
+    )
 
-# ==================== FILE HANDLER ====================
+# ==================== FILE HANDLER WITH MULTI-LANGUAGE ====================
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle uploaded .txt files"""
+    """Handle uploaded .txt files with beautiful output"""
     user_id = update.effective_user.id
+    lang_code = get_lang(user_id)
+    lang = LANGUAGES[lang_code]
+    
     global total_checks, valid_accounts, invalid_accounts
     
     if not check_rate_limit(user_id):
-        await update.message.reply_text("⏰ Too many requests. Please wait a minute.")
+        await update.message.reply_text(
+            f"⏰ **{lang['rate_limit']}**",
+            parse_mode='Markdown'
+        )
         return
     
     document = update.message.document
     
     if not document.file_name.endswith('.txt'):
-        await update.message.reply_text("❌ Please upload a `.txt` file.")
+        await update.message.reply_text(
+            f"❌ **{lang['wrong_format']}**",
+            parse_mode='Markdown'
+        )
         return
     
-    status_msg = await update.message.reply_text("📥 Downloading file...")
+    # Beautiful progress message
+    progress_msg = await update.message.reply_text(
+        f"""
+╔══════════════════════════════════════════╗
+║     📥 **{lang['file_received']}** 📥     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 **File:** `{document.file_name}`
+⏳ **Status:** Downloading...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+        """,
+        parse_mode='Markdown'
+    )
     
     try:
         file = await context.bot.get_file(document.file_id)
@@ -400,27 +566,59 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines = content.split('\n')
         accounts = [line.strip() for line in lines if line.strip()]
         
-        await status_msg.edit_text(f"📊 Found {len(accounts)} accounts. Checking with YOUR API...")
+        await progress_msg.edit_text(
+            f"""
+╔══════════════════════════════════════════╗
+║     📊 **{lang['analyzing']}** 📊     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 **File:** `{document.file_name}`
+🔍 **Accounts Found:** `{len(accounts)}`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+            """,
+            parse_mode='Markdown'
+        )
         
         valid_count = 0
         invalid_count = 0
         error_counts = defaultdict(int)
         
         for i, line in enumerate(accounts, 1):
-            # Parse the line in your exact format
+            # Parse the line
             account = parse_account_line(line)
             
             if not account:
                 invalid_count += 1
                 error_counts['PARSING_FAILED'] += 1
-                logger.warning(f"❌ Failed to parse line {i}")
                 continue
             
-            # Update progress
+            # Update progress with beautiful bar
             if i % 2 == 0 or i == len(accounts):
-                await status_msg.edit_text(
-                    f"🔄 Checking {i}/{len(accounts)}...\n"
-                    f"✅ Valid: {valid_count} | ❌ Invalid: {invalid_count}"
+                progress = i / len(accounts)
+                bar_length = 20
+                filled = int(bar_length * progress)
+                bar = "█" * filled + "░" * (bar_length - filled)
+                
+                await progress_msg.edit_text(
+                    f"""
+╔══════════════════════════════════════════╗
+║     🔄 **{lang['processing']}...** 🔄     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 **Progress:** `{i}/{len(accounts)}`
+📈 **{progress*100:.1f}%** `{bar}`
+
+✅ **{lang['valid_found']}:** `{valid_count}`
+❌ **{lang['invalid_found']}:** `{invalid_count}`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+                    """,
+                    parse_mode='Markdown'
                 )
             
             # Check with YOUR API
@@ -432,62 +630,116 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 valid_count += 1
                 valid_accounts += 1
                 
-                # Build account details string
+                # Beautiful valid account output
                 details = []
                 if account.get('country'):
-                    details.append(f"• **Country:** {account['country']}")
+                    details.append(f"🌍 **{lang['country']}:** `{account['country']}`")
                 if account.get('phone'):
-                    details.append(f"• **Phone:** {account['phone']}")
+                    details.append(f"📞 **{lang['phone']}:** `{account['phone']}`")
+                if account.get('plan'):
+                    details.append(f"📺 **{lang['plan']}:** `{account['plan']}`")
                 
                 details_str = '\n'.join(details) if details else ''
                 
                 msg = f"""
-✅ **VALID ACCOUNT FOUND!**
+✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨
+     ⭐ **{lang['valid']} ACCOUNT #{valid_count}** ⭐     
+✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨✨
 
-📧 **Email:** `{account['email']}`
-🔑 **Password:** `{account.get('password', 'N/A')}`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📧 **{lang['email']}:** `{account['email']}`
+🔑 **{lang['password']}:** `{account.get('password', 'N/A')}`
 {details_str}
 
-🔗 **Login Link:** `{result['login_url']}`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔗 **{lang['login_link']}:**
+`{result['login_url']}`
 
-⚡ {YOUR_CREDIT}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ **{lang['powered_by']} {YOUR_CREDIT}** ✨
                 """
                 
-                keyboard = [[InlineKeyboardButton("🎬 LAUNCH NETFLIX", url=result['login_url'])]]
-                await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
+                keyboard = [[InlineKeyboardButton(lang['launch'], url=result['login_url'])]]
+                await update.message.reply_text(
+                    msg,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
+                )
                 
             else:
                 invalid_count += 1
                 invalid_accounts += 1
                 error_code = result.get('error_code', 'UNKNOWN')
                 error_counts[error_code] += 1
-                
-                # Log the error for debugging
-                logger.info(f"❌ Account {i}: {account['email']} - {result.get('error')}")
             
             await asyncio.sleep(0.5)
         
-        # Final summary with error breakdown
-        summary = f"""
-📊 **CHECK COMPLETE!**
+        # Beautiful final summary
+        success_rate = valid_count/len(accounts)*100 if len(accounts) > 0 else 0
+        
+        if valid_count > 0:
+            summary = f"""
+╔══════════════════════════════════════════╗
+║     ✅ **{lang['complete']}** ✅     ║
+╚══════════════════════════════════════════╝
 
-✅ **Valid Accounts:** {valid_count}
-❌ **Invalid Accounts:** {invalid_count}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 **{lang['results']}:**
 
-**Error Breakdown:**
+✨ **{lang['valid_found']}:** `{valid_count}`
+💫 **{lang['success_rate']}:** `{success_rate:.1f}%`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📌 **Valid accounts have been sent above!**
+
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            """
+        else:
+            summary = f"""
+╔══════════════════════════════════════════╗
+║     ❌ **{lang['no_valid']}** ❌     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 **{lang['results']}:**
+
+❌ **{lang['invalid_found']}:** `{invalid_count}`
+📈 **Error Breakdown:**
+
 """
+            for error, count in error_counts.items():
+                summary += f"   • `{error}`: {count}\n"
+            
+            summary += f"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 **Note:** 'INVALID_RESPONSE_FORMAT' means
+    the Netflix cookie has expired.
+
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            """
         
-        for error, count in error_counts.items():
-            summary += f"• `{error}`: {count}\n"
-        
-        if valid_count == 0:
-            summary += "\n💡 **Note:** 'INVALID_RESPONSE_FORMAT' usually means the Netflix ID is expired."
-        
-        await status_msg.edit_text(summary)
+        await progress_msg.edit_text(summary, parse_mode='Markdown')
         
     except Exception as e:
         logger.error(f"Error: {e}")
-        await status_msg.edit_text(f"❌ Error: {str(e)[:100]}")
+        await progress_msg.edit_text(
+            f"""
+╔══════════════════════════════════════════╗
+║     ❌ **{lang['error_occurred']}** ❌     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ **Error:** `{str(e)[:100]}`
+
+💡 Please try again or check file format
+
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            """,
+            parse_mode='Markdown'
+        )
 
 # ==================== RATE LIMITING ====================
 
@@ -499,36 +751,30 @@ def check_rate_limit(user_id, limit=5, period=60):
     rate_limits[user_id].append(now)
     return True
 
-# ==================== BUTTON CALLBACK ====================
-
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle button callbacks"""
-    query = update.callback_query
-    await query.answer()
-
 # ==================== MAIN FUNCTION ====================
 
 async def run_bot():
     """Run the bot"""
     print("=" * 60)
-    print("🎬 NETFLIX ACCOUNT CHECKER BOT")
+    print("🎬 NETFLIX PREMIUM CHECKER BOT")
     print("=" * 60)
     print(f"✅ Bot Token: {TOKEN[:10]}...")
     print(f"✅ YOUR API: {API_URL}")
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
-    print("🤖 Bot is starting...")
-    print("📝 Using YOUR API exactly as specified")
+    print("🌐 Languages: English, 中文, ខ្មែរ")
+    print("🎨 Beautiful Premium Output")
     print("=" * 60)
     
     app = Application.builder().token(TOKEN).build()
     
+    # Add handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("clear", clear_command))
-    app.add_handler(CommandHandler("testapi", test_api_command))
-    app.add_handler(CallbackQueryHandler(button_callback))
+    app.add_handler(CommandHandler("language", language_command))
+    app.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
     app.add_handler(MessageHandler(filters.Document.FileExtension("txt"), handle_file))
     
     await app.initialize()
@@ -559,5 +805,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
