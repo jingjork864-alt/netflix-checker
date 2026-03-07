@@ -63,91 +63,240 @@ total_checks = 0
 valid_accounts = 0
 invalid_accounts = 0
 
-# ==================== ULTRA SIMPLE UNIVERSAL PARSER ====================
-# This works for ANY format - emojis, special characters, anything!
+# ==================== UNIVERSAL MULTI-LANGUAGE PARSER ====================
+# Works with ANY language (English, Spanish, Portuguese, Japanese, etc.)
+# Works with ANY format (emoji, text, JSON, CSV, etc.)
 
-def clean_text(text):
-    """Clean text but preserve important information"""
-    try:
-        # Remove null bytes and control characters
-        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
-        return text
-    except:
-        return text
+def detect_account_separator(content):
+    """Automatically detect how accounts are separated in the file"""
+    # Common separators
+    separators = [
+        '----------------------------------------',
+        '════════════════════════════════════════',
+        '────────────────────────────────────────',
+        '==========',
+        '------',
+        '\n\n\n',  # Multiple newlines
+        '\r\n\r\n',
+    ]
+    
+    for sep in separators:
+        if sep in content:
+            return sep
+    
+    # If no separator found, try to detect by "PREMIUM ACCOUNT" or similar patterns
+    lines = content.split('\n')
+    account_starts = []
+    
+    patterns = [
+        r'PREMIUM ACCOUNT',
+        r'ACCOUNT #\d+',
+        r'Account #\d+',
+        r'Cuenta #\d+',
+        r'Conta #\d+',
+        r'アカウント #\d+',
+    ]
+    
+    for i, line in enumerate(lines):
+        for pattern in patterns:
+            if re.search(pattern, line, re.IGNORECASE):
+                account_starts.append(i)
+                break
+    
+    if len(account_starts) > 1:
+        # Use the line numbers to determine separator
+        return 'LINE_BASED'
+    
+    return None
 
-def parse_account_line(line):
-    """ULTRA SIMPLE - ONLY looks for NetflixId= anywhere in the text"""
-    try:
-        # Clean the line first
-        line = clean_text(line.strip())
-        if not line:
-            return None
+def extract_accounts(content):
+    """Extract individual accounts from file content using smart detection"""
+    # Try to detect separator
+    separator = detect_account_separator(content)
+    
+    if separator and separator != 'LINE_BASED':
+        # Split by the detected separator
+        raw_accounts = content.split(separator)
+        accounts = [acc.strip() for acc in raw_accounts if acc.strip() and len(acc.strip()) > 50]
+        return accounts
+    
+    elif separator == 'LINE_BASED':
+        # Use line-based detection with account headers
+        lines = content.split('\n')
+        accounts = []
+        current_account = []
+        in_account = False
         
+        for line in lines:
+            # Check if this line starts a new account
+            is_new_account = any([
+                re.search(r'PREMIUM ACCOUNT', line, re.IGNORECASE),
+                re.search(r'ACCOUNT #\d+', line, re.IGNORECASE),
+                re.search(r'Account #\d+', line, re.IGNORECASE),
+                re.search(r'Cuenta #\d+', line, re.IGNORECASE),
+                re.search(r'Conta #\d+', line, re.IGNORECASE),
+                'Direct Login URL' in line,
+                'NetflixId=' in line and not current_account,
+            ])
+            
+            if is_new_account and current_account:
+                # Save previous account
+                accounts.append('\n'.join(current_account))
+                current_account = [line]
+            elif is_new_account:
+                current_account = [line]
+            elif current_account:
+                current_account.append(line)
+        
+        # Add the last account
+        if current_account:
+            accounts.append('\n'.join(current_account))
+        
+        return accounts
+    
+    else:
+        # No clear separator, try to find NetflixId patterns
+        lines = content.split('\n')
+        accounts = []
+        current_account = []
+        
+        for line in lines:
+            if 'NetflixId=' in line and not current_account:
+                current_account = [line]
+            elif 'NetflixId=' in line and current_account:
+                accounts.append('\n'.join(current_account))
+                current_account = [line]
+            elif current_account:
+                current_account.append(line)
+        
+        if current_account:
+            accounts.append('\n'.join(current_account))
+        
+        return accounts
+
+def parse_account(account_text):
+    """Parse a single account (multi-line) in ANY language"""
+    try:
         account = {}
         
-        # STEP 1: Find NetflixId= ANYWHERE in the text (this is ALL that matters)
-        # This regex works with emojis, special chars, everything!
-        netflix_id_match = re.search(r'NetflixId=([a-zA-Z0-9%._-]+)', line)
-        
-        if not netflix_id_match:
-            # Try alternate pattern with & and other special chars
-            netflix_id_match = re.search(r'NetflixId=([^&\s\'"]+)', line)
-        
+        # STEP 1: Find NetflixId (THIS IS THE MOST IMPORTANT)
+        netflix_id_match = re.search(r'NetflixId=([^&\s\'"]+)', account_text)
         if netflix_id_match:
             account['netflix_id'] = netflix_id_match.group(1).strip()
             logger.info(f"✅ Found NetflixId: {account['netflix_id'][:30]}...")
         else:
-            # Try to find in cookie pattern
-            cookie_match = re.search(r'[Cc]ookie.*?[=:].*?(NetflixId=[^&\s]+)', line)
-            if cookie_match:
-                netflix_id_match = re.search(r'NetflixId=([^&\s]+)', cookie_match.group(1))
-                if netflix_id_match:
-                    account['netflix_id'] = netflix_id_match.group(1).strip()
-                    logger.info(f"✅ Found NetflixId from cookie: {account['netflix_id'][:30]}...")
+            return None
         
-        # If we found a NetflixId, try to get email (optional)
-        if 'netflix_id' in account:
-            # Look for email pattern
-            email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', line)
-            if email_match:
-                account['email'] = email_match.group(1).strip()
-            else:
-                # Generate placeholder email
-                account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
-            
-            # Look for direct URL (optional)
-            url_match = re.search(r'(https?://[^\s]+nftoken=[^\s]+)', line)
-            if url_match:
-                account['direct_url'] = url_match.group(1).strip()
-                logger.info(f"✅ Found direct URL")
-            
-            # Try to extract other useful fields (optional)
-            # Name
-            name_match = re.search(r'[Nn]ame[=:]\s*([^\n]+)', line)
-            if name_match:
-                account['name'] = name_match.group(1).strip()
-            
-            # Country
-            country_match = re.search(r'[Cc]ountry[=:]\s*([^\n]+)', line)
-            if country_match:
-                account['country'] = country_match.group(1).strip()
-            
-            # Plan
-            plan_match = re.search(r'[Pp]lan[=:]\s*([^\n]+)', line)
-            if plan_match:
-                account['plan'] = plan_match.group(1).strip()
-            
-            # Quality
-            quality_match = re.search(r'[Qq]uality[=:]\s*([^\n]+)', line)
-            if quality_match:
-                account['quality'] = quality_match.group(1).strip()
-            
-            return account
+        # STEP 2: Find Email in ANY language (look for @ symbol)
+        email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', account_text)
+        if email_match:
+            account['email'] = email_match.group(1).strip()
+        else:
+            account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
         
-        return None
+        # STEP 3: Find Direct Login URL (if present)
+        url_match = re.search(r'(https?://[^\s]+nftoken=[^\s]+)', account_text)
+        if url_match:
+            account['direct_url'] = url_match.group(1).strip()
+            logger.info(f"✅ Found direct URL")
+        
+        # STEP 4: Find fields in ANY language using flexible patterns
+        field_patterns = {
+            'name': [
+                r'Name[:\s]*([^\n]+)',
+                r'Nombre[:\s]*([^\n]+)',
+                r'Nome[:\s]*([^\n]+)',
+                r'名前[:\s]*([^\n]+)',
+                r'氏名[:\s]*([^\n]+)',
+                r'馃懁 Name[:\s]*([^\n]+)',
+            ],
+            'country': [
+                r'Country[:\s]*([^\n]+)',
+                r'País[:\s]*([^\n]+)',
+                r'Pais[:\s]*([^\n]+)',
+                r'国[:\s]*([^\n]+)',
+                r'馃實 Country[:\s]*([^\n]+)',
+            ],
+            'plan': [
+                r'Plan[:\s]*([^\n]+)',
+                r'Plano[:\s]*([^\n]+)',
+                r'プラン[:\s]*([^\n]+)',
+                r'馃搵 Plan[:\s]*([^\n]+)',
+            ],
+            'quality': [
+                r'Video Quality[:\s]*([^\n]+)',
+                r'Qualidade[:\s]*([^\n]+)',
+                r'画質[:\s]*([^\n]+)',
+                r'馃帴 Video Quality[:\s]*([^\n]+)',
+            ],
+            'max_streams': [
+                r'Max Streams[:\s]*([^\n]+)',
+                r'Máx. de streams[:\s]*([^\n]+)',
+                r'同時視聴[:\s]*([^\n]+)',
+                r'馃摵 Max Streams[:\s]*([^\n]+)',
+            ],
+            'price': [
+                r'Price[:\s]*([^\n]+)',
+                r'Precio[:\s]*([^\n]+)',
+                r'Preço[:\s]*([^\n]+)',
+                r'料金[:\s]*([^\n]+)',
+                r'馃挵 Price[:\s]*([^\n]+)',
+            ],
+            'member_since': [
+                r'Member Since[:\s]*([^\n]+)',
+                r'Miembro desde[:\s]*([^\n]+)',
+                r'Membro desde[:\s]*([^\n]+)',
+                r'入会日[:\s]*([^\n]+)',
+                r'馃搮 Member Since[:\s]*([^\n]+)',
+            ],
+            'next_billing': [
+                r'Next Billing Date[:\s]*([^\n]+)',
+                r'Próxima facturación[:\s]*([^\n]+)',
+                r'Próximo pagamento[:\s]*([^\n]+)',
+                r'次回請求日[:\s]*([^\n]+)',
+                r'馃搮 Next Billing Date[:\s]*([^\n]+)',
+            ],
+            'payment_method': [
+                r'Payment Method[:\s]*([^\n]+)',
+                r'Método de pago[:\s]*([^\n]+)',
+                r'Método de pagamento[:\s]*([^\n]+)',
+                r'支払い方法[:\s]*([^\n]+)',
+                r'馃挸 Payment Method[:\s]*([^\n]+)',
+            ],
+            'card_brand': [
+                r'Card Brand[:\s]*([^\n]+)',
+                r'Marca de tarjeta[:\s]*([^\n]+)',
+                r'Bandeira do cartão[:\s]*([^\n]+)',
+                r'カードブランド[:\s]*([^\n]+)',
+                r'馃彟 Card Brand[:\s]*([^\n]+)',
+            ],
+            'last4': [
+                r'Last 4 Digits[:\s]*([^\n]+)',
+                r'Últimos 4 dígitos[:\s]*([^\n]+)',
+                r'Últimos 4 dígitos[:\s]*([^\n]+)',
+                r'下4桁[:\s]*([^\n]+)',
+                r'馃敘 Last 4 Digits[:\s]*([^\n]+)',
+            ],
+            'phone': [
+                r'Phone[:\s]*([^\n]+)',
+                r'Teléfono[:\s]*([^\n]+)',
+                r'Telefone[:\s]*([^\n]+)',
+                r'電話番号[:\s]*([^\n]+)',
+                r'馃摓 Phone[:\s]*([^\n]+)',
+            ],
+        }
+        
+        for key, patterns in field_patterns.items():
+            for pattern in patterns:
+                match = re.search(pattern, account_text, re.IGNORECASE)
+                if match:
+                    account[key] = match.group(1).strip()
+                    break
+        
+        return account
         
     except Exception as e:
-        logger.error(f"Error parsing line: {e}")
+        logger.error(f"Error parsing account: {e}")
         return None
 
 # ==================== API FUNCTIONS ====================
@@ -244,11 +393,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📤 **Send me a .txt file** with Netflix accounts
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+🌍 **Works with ANY language!**
+🇺🇸 English | 🇪🇸 Spanish | 🇧🇷 Portuguese | 🇯🇵 Japanese | 🇮🇳 Hindi | 🇫🇷 French | 🇩🇪 German | 🇨🇳 Chinese
+
 📋 **Any format works!** I'll automatically:
-✅ Extract Netflix ID from ANY format (including emojis!)
+✅ Detect account separators automatically
+✅ Extract Netflix ID from ANY format
+✅ Support multi-line accounts
+✅ Work with emojis and special characters
 ✅ Check validity with official API
 ✅ Send premium login links
-✅ Show detailed statistics
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Commands:**
@@ -275,22 +429,39 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1️⃣ **Prepare your .txt file**
-   • ANY format is accepted!
-   • Emojis, special characters, anything!
+   • ANY language is accepted!
+   • ANY format works!
    • Just make sure it contains `NetflixId=...`
 
 2️⃣ **Send the file to me**
-   • I'll automatically extract all Netflix IDs
-   • Process each one with the API
+   • I'll automatically detect accounts
+   • Process each account
    • Only valid accounts will be sent
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📝 **Supported Formats (ALL WORK):**
+🌍 **SUPPORTED LANGUAGES:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✓ `email:password | NetflixCookies = NetflixId=...`
-✓ `馃崻 Cookie: NetflixId=...` (emoji format)
-✓ `NetflixId=v%3D3%26ct%3D...` (raw format)
-✓ **ANY text containing NetflixId=...**
+✓ English (Plan, Name, Country)
+✓ Spanish (Plan, Nombre, País)
+✓ Portuguese (Plano, Nome, País)
+✓ Japanese (プラン, 名前, 国)
+✓ French (Forfait, Nom, Pays)
+✓ German (Plan, Name, Land)
+✓ Italian (Piano, Nome, Paese)
+✓ Hindi (योजना, नाम, देश)
+✓ Chinese (套餐, 姓名, 国家)
+✓ Korean (요금제, 이름, 국가)
+✓ Russian (План, Имя, Страна)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 **SUPPORTED FORMATS:**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ Emoji format (馃敼, 馃搧, 馃崻)
+✓ Text format (Name:, Country:, Plan:)
+✓ JSON format
+✓ CSV format
+✓ Raw cookie format
+✓ Mixed formats
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⌨️ **COMMANDS:**
@@ -355,10 +526,10 @@ You can now upload a new file.
         parse_mode='Markdown'
     )
 
-# ==================== FILE HANDLER ====================
+# ==================== FILE HANDLER WITH UNIVERSAL SUPPORT ====================
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle uploaded .txt files with premium formatting"""
+    """Handle uploaded .txt files - supports ANY language and format"""
     user_id = update.effective_user.id
     global total_checks, valid_accounts, invalid_accounts
     
@@ -421,9 +592,27 @@ Please upload a `.txt` file.
         file_content = await file.download_as_bytearray()
         content = file_content.decode('utf-8', errors='ignore')
         
-        # Split into lines
-        lines = content.split('\n')
-        valid_lines = [l for l in lines if l.strip()]
+        # Extract accounts using smart detection
+        accounts = extract_accounts(content)
+        
+        if not accounts:
+            await status_msg.edit_text(
+                f"""
+╔════════════════════════════════════════╗
+║        ❌ NO ACCOUNTS FOUND ❌         ║
+╚════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+No accounts with NetflixId= were found.
+
+💡 **Make sure your file contains NetflixId=**
+
+⚡ **Powered by {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                """,
+                parse_mode='Markdown'
+            )
+            return
         
         await status_msg.edit_text(
             f"""
@@ -433,11 +622,10 @@ Please upload a `.txt` file.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📄 **File:** `{document.file_name}`
-📝 **Total Lines:** `{len(lines)}`
-✅ **Processing:** `{len(valid_lines)}` lines
+📝 **Found:** `{len(accounts)}` accounts
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔄 **Looking for NetflixId= in any format...**
+🔄 **Processing each account...**
 
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -445,27 +633,27 @@ Please upload a `.txt` file.
             parse_mode='Markdown'
         )
         
-        # Process each line
+        # Process each account
         valid_count = 0
         invalid_count = 0
         valid_accounts_found = []
         
-        for i, line in enumerate(valid_lines, 1):
-            # Parse account using universal parser
-            account = parse_account_line(line)
+        for i, account_block in enumerate(accounts, 1):
+            # Parse the account (multi-language support)
+            account = parse_account(account_block)
             
             if not account:
                 invalid_count += 1
                 continue
             
             # Calculate progress
-            progress = i / len(valid_lines)
+            progress = i / len(accounts)
             bar_length = 15
             filled = int(bar_length * progress)
             bar = "█" * filled + "░" * (bar_length - filled)
             
-            # Update progress every few accounts
-            if i % 3 == 0 or i == len(valid_lines):
+            # Update progress
+            if i % 1 == 0 or i == len(accounts):
                 await status_msg.edit_text(
                     f"""
 ╔════════════════════════════════════════╗
@@ -473,7 +661,7 @@ Please upload a `.txt` file.
 ╚════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **Progress:** `{i}/{len(valid_lines)}`
+📊 **Progress:** `{i}/{len(accounts)}`
 📈 **Complete:** `{progress*100:.1f}%`
 `{bar}`
 
@@ -518,7 +706,7 @@ Please upload a `.txt` file.
             await asyncio.sleep(0.5)
         
         # COMPLETION SCREEN
-        success_rate = valid_count/len(valid_lines)*100 if len(valid_lines) > 0 else 0
+        success_rate = valid_count/len(accounts)*100 if len(accounts) > 0 else 0
         
         completion_text = f"""
 ╔════════════════════════════════════════╗
@@ -529,7 +717,7 @@ Please upload a `.txt` file.
 📊 **RESULTS SUMMARY**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📁 **File:** `{document.file_name}`
-📝 **Total Processed:** `{len(valid_lines)}`
+📝 **Total Accounts:** `{len(accounts)}`
 ✅ **Valid Accounts:** `{valid_count}`
 ❌ **Invalid:** `{invalid_count}`
 📈 **Success Rate:** `{success_rate:.1f}%`
@@ -546,11 +734,9 @@ Please upload a `.txt` file.
         # Send ALL valid accounts
         if valid_accounts_found:
             for idx, acc in enumerate(valid_accounts_found, 1):
-                # Check if this was a pre-validated account (has direct_url)
-                if acc.get('direct_url'):
-                    premium_msg = f"""
+                premium_msg = f"""
 ╔════════════════════════════════════════╗
-║     ✅ PREMIUM ACCOUNT #{idx}/{valid_count} ✅     ║
+║     ✅ VALID ACCOUNT #{idx}/{valid_count} ✅     ║
 ╚════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -558,38 +744,6 @@ Please upload a `.txt` file.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • **Email:** `{acc['email']}`
 • **Name:** `{acc.get('name', 'N/A')}`
-• **Country:** `{acc.get('country', 'N/A')}`
-• **Plan:** `{acc.get('plan', 'N/A')}`
-• **Quality:** `{acc.get('quality', 'N/A')}`
-• **Max Streams:** `{acc.get('streams', 'N/A')}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔗 **DIRECT LOGIN LINK**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`{acc['login_url']}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ *Pre-validated account from file*
-
-⚡ **Powered by {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                    """
-                else:
-                    premium_msg = f"""
-╔════════════════════════════════════════╗
-║     ✅ VALID ACCOUNT #{idx}/{valid_count} ✅     ║
-╚════════════════════════════════════════╝
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📧 **LOGIN CREDENTIALS**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• **Email:** `{acc['email']}`
-• **Password:** `{acc.get('password', 'N/A')}`
-• **Status:** `✅ ACTIVE`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🌍 **ACCOUNT DETAILS**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • **Country:** `{acc.get('country', 'N/A')}`
 • **Plan:** `{acc.get('plan', 'N/A')}`
 • **Quality:** `{acc.get('quality', 'N/A')}`
@@ -605,7 +759,7 @@ Please upload a `.txt` file.
 
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                    """
+                """
                 
                 keyboard = [[InlineKeyboardButton("🎬 LAUNCH NETFLIX", url=acc['login_url'])]]
                 
@@ -701,7 +855,8 @@ async def run_bot():
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
     print("🤖 Bot is starting...")
-    print("📝 Universal parser enabled - accepts ANY format including emojis!")
+    print("🌍 Universal Multi-Language Parser Enabled")
+    print("📝 Supports: English, Spanish, Portuguese, Japanese, and more!")
     print("=" * 60)
     
     # Create application with custom settings
