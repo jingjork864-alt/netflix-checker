@@ -63,71 +63,84 @@ total_checks = 0
 valid_accounts = 0
 invalid_accounts = 0
 
-# ==================== UNIVERSAL PARSER ====================
-# This works for ANY format - it only cares about finding NetflixId=
+# ==================== ULTRA SIMPLE UNIVERSAL PARSER ====================
+# This works for ANY format - emojis, special characters, anything!
+
+def clean_text(text):
+    """Clean text but preserve important information"""
+    try:
+        # Remove null bytes and control characters
+        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+        return text
+    except:
+        return text
 
 def parse_account_line(line):
-    """Universal parser - extracts NetflixId from ANY format"""
+    """ULTRA SIMPLE - ONLY looks for NetflixId= anywhere in the text"""
     try:
-        line = line.strip()
-        if not line or line.startswith('#'):
+        # Clean the line first
+        line = clean_text(line.strip())
+        if not line:
             return None
         
         account = {}
         
-        # STEP 1: Find NetflixId= anywhere in the text (this is the ONLY thing that matters)
-        netflix_id_match = re.search(r'NetflixId=([^&\s\'"]+)', line)
+        # STEP 1: Find NetflixId= ANYWHERE in the text (this is ALL that matters)
+        # This regex works with emojis, special chars, everything!
+        netflix_id_match = re.search(r'NetflixId=([a-zA-Z0-9%._-]+)', line)
+        
+        if not netflix_id_match:
+            # Try alternate pattern with & and other special chars
+            netflix_id_match = re.search(r'NetflixId=([^&\s\'"]+)', line)
         
         if netflix_id_match:
             account['netflix_id'] = netflix_id_match.group(1).strip()
             logger.info(f"✅ Found NetflixId: {account['netflix_id'][:30]}...")
         else:
-            # Try alternate patterns (Cookie: NetflixId=...)
-            alt_match = re.search(r'[Cc]ookie.*?[=:].*?(NetflixId=[^&\s]+)', line)
-            if alt_match:
-                cookie_part = alt_match.group(1)
-                netflix_id_match = re.search(r'NetflixId=([^&\s]+)', cookie_part)
+            # Try to find in cookie pattern
+            cookie_match = re.search(r'[Cc]ookie.*?[=:].*?(NetflixId=[^&\s]+)', line)
+            if cookie_match:
+                netflix_id_match = re.search(r'NetflixId=([^&\s]+)', cookie_match.group(1))
                 if netflix_id_match:
                     account['netflix_id'] = netflix_id_match.group(1).strip()
                     logger.info(f"✅ Found NetflixId from cookie: {account['netflix_id'][:30]}...")
         
-        # If we found a NetflixId, try to get additional info (optional)
+        # If we found a NetflixId, try to get email (optional)
         if 'netflix_id' in account:
-            # Try to find email
+            # Look for email pattern
             email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', line)
             if email_match:
                 account['email'] = email_match.group(1).strip()
             else:
-                # Generate a placeholder email
+                # Generate placeholder email
                 account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
             
-            # Try to find password
-            password_match = re.search(r':([^\s|]+)', line)
-            if password_match and len(password_match.group(1)) > 3:
-                account['password'] = password_match.group(1).strip()
-            
-            # Try to find direct URL
-            url_match = re.search(r'(https?://netflix\.com/[^\s\'"]+)', line)
+            # Look for direct URL (optional)
+            url_match = re.search(r'(https?://[^\s]+nftoken=[^\s]+)', line)
             if url_match:
                 account['direct_url'] = url_match.group(1).strip()
-                # Extract NetflixId from URL if present
-                url_id_match = re.search(r'nftoken=([^&\s]+)', account['direct_url'])
-                if url_id_match and 'netflix_id' not in account:
-                    account['netflix_id'] = url_id_match.group(1).strip()
+                logger.info(f"✅ Found direct URL")
             
-            # Try to extract other useful fields
-            fields = {
-                'country': r'[Cc]ountry[=:]\s*([^|\n]+)',
-                'plan': r'[Pp]lan[=:]\s*([^|\n]+)',
-                'quality': r'[Vv]ideo[Qq]uality[=:]\s*([^|\n]+)',
-                'max_streams': r'[Mm]ax[Ss]treams[=:]\s*([^|\n]+)',
-                'name': r'[Nn]ame[=:]\s*([^|\n]+)',
-            }
+            # Try to extract other useful fields (optional)
+            # Name
+            name_match = re.search(r'[Nn]ame[=:]\s*([^\n]+)', line)
+            if name_match:
+                account['name'] = name_match.group(1).strip()
             
-            for key, pattern in fields.items():
-                match = re.search(pattern, line)
-                if match:
-                    account[key] = match.group(1).strip()
+            # Country
+            country_match = re.search(r'[Cc]ountry[=:]\s*([^\n]+)', line)
+            if country_match:
+                account['country'] = country_match.group(1).strip()
+            
+            # Plan
+            plan_match = re.search(r'[Pp]lan[=:]\s*([^\n]+)', line)
+            if plan_match:
+                account['plan'] = plan_match.group(1).strip()
+            
+            # Quality
+            quality_match = re.search(r'[Qq]uality[=:]\s*([^\n]+)', line)
+            if quality_match:
+                account['quality'] = quality_match.group(1).strip()
             
             return account
         
@@ -232,7 +245,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📋 **Any format works!** I'll automatically:
-✅ Extract Netflix ID from ANY format
+✅ Extract Netflix ID from ANY format (including emojis!)
 ✅ Check validity with official API
 ✅ Send premium login links
 ✅ Show detailed statistics
@@ -262,7 +275,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1️⃣ **Prepare your .txt file**
-   • Any format is accepted!
+   • ANY format is accepted!
+   • Emojis, special characters, anything!
    • Just make sure it contains `NetflixId=...`
 
 2️⃣ **Send the file to me**
@@ -276,7 +290,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✓ `email:password | NetflixCookies = NetflixId=...`
 ✓ `馃崻 Cookie: NetflixId=...` (emoji format)
 ✓ `NetflixId=v%3D3%26ct%3D...` (raw format)
-✓ Any text containing `NetflixId=...`
+✓ **ANY text containing NetflixId=...**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⌨️ **COMMANDS:**
@@ -409,7 +423,7 @@ Please upload a `.txt` file.
         
         # Split into lines
         lines = content.split('\n')
-        valid_lines = [l for l in lines if l.strip() and not l.startswith('#')]
+        valid_lines = [l for l in lines if l.strip()]
         
         await status_msg.edit_text(
             f"""
@@ -420,10 +434,10 @@ Please upload a `.txt` file.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📄 **File:** `{document.file_name}`
 📝 **Total Lines:** `{len(lines)}`
-✅ **Valid Entries:** `{len(valid_lines)}`
+✅ **Processing:** `{len(valid_lines)}` lines
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔄 **Starting universal parsing...**
+🔄 **Looking for NetflixId= in any format...**
 
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -489,10 +503,10 @@ Please upload a `.txt` file.
                     'email': email,
                     'password': account.get('password', 'N/A'),
                     'login_url': result['login_url'],
-                    'country': account.get('country', account.get('Country', 'N/A')),
-                    'plan': account.get('plan', account.get('Plan', 'N/A')),
-                    'quality': account.get('quality', account.get('video_quality', 'N/A')),
-                    'streams': account.get('max_streams', account.get('MaxStreams', 'N/A')),
+                    'country': account.get('country', 'N/A'),
+                    'plan': account.get('plan', 'N/A'),
+                    'quality': account.get('quality', 'N/A'),
+                    'streams': account.get('max_streams', 'N/A'),
                     'name': account.get('name', 'N/A'),
                     'direct_url': account.get('direct_url', None)
                 })
@@ -687,7 +701,7 @@ async def run_bot():
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
     print("🤖 Bot is starting...")
-    print("📝 Universal parser enabled - accepts ANY format")
+    print("📝 Universal parser enabled - accepts ANY format including emojis!")
     print("=" * 60)
     
     # Create application with custom settings
