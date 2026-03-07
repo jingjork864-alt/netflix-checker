@@ -18,7 +18,7 @@ load_dotenv(dotenv_path=env_path)
 # ==================== YOUR API CONFIGURATION ====================
 TOKEN = os.getenv('BOT_TOKEN')
 API_URL = "http://genznfapi.onrender.com"  # YOUR API
-SECRET_KEY = "KUROSAKI1D_cP642DCEw0bxnMLHSIFlGZQjVh1RgSPM"  # YOUR SECRET KEY
+SECRET_KEY = KUROSAKI3DAY_d5Cl7U5mpXy2DL2ZrwS0Go47PCNYdjqB"  # YOUR SECRET KEY
 
 # YOUR CREDIT
 YOUR_CREDIT = "@CrackByLIM"
@@ -559,3 +559,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
