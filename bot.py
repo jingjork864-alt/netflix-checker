@@ -63,18 +63,21 @@ total_checks = 0
 valid_accounts = 0
 invalid_accounts = 0
 
-# ==================== UNIVERSAL MULTI-LANGUAGE PARSER ====================
-# Works with ANY language (English, Spanish, Portuguese, Japanese, etc.)
-# Works with ANY format (emoji, text, JSON, CSV, etc.)
+# ==================== UNIVERSAL .TXT PARSER ====================
+# This parser ONLY cares about finding NetflixId= in the text
+# Everything else is optional - works with ANY format
 
-def detect_account_separator(content):
-    """Automatically detect how accounts are separated in the file"""
-    # Common separators
+def find_account_separator(content):
+    """Automatically detect how accounts are separated in the .txt file"""
+    # Common separators found in .txt files
     separators = [
         '----------------------------------------',
         '════════════════════════════════════════',
         '────────────────────────────────────────',
-        '==========',
+        '========================================',
+        '++++++++++++++++++++++++++++++++++++++++',
+        '---------------------------------------',
+        '----------',
         '------',
         '\n\n\n',  # Multiple newlines
         '\r\n\r\n',
@@ -84,214 +87,164 @@ def detect_account_separator(content):
         if sep in content:
             return sep
     
-    # If no separator found, try to detect by "PREMIUM ACCOUNT" or similar patterns
+    # If no standard separator, try to detect by account headers
     lines = content.split('\n')
-    account_starts = []
+    account_headers = []
     
-    patterns = [
-        r'PREMIUM ACCOUNT',
+    header_patterns = [
         r'ACCOUNT #\d+',
         r'Account #\d+',
-        r'Cuenta #\d+',
-        r'Conta #\d+',
-        r'アカウント #\d+',
+        r'PREMIUM ACCOUNT',
+        r'Premium Account',
+        r'Account \d+',
+        r'#\d+',
     ]
     
     for i, line in enumerate(lines):
-        for pattern in patterns:
+        for pattern in header_patterns:
             if re.search(pattern, line, re.IGNORECASE):
-                account_starts.append(i)
+                account_headers.append(i)
                 break
     
-    if len(account_starts) > 1:
-        # Use the line numbers to determine separator
-        return 'LINE_BASED'
+    if len(account_headers) > 1:
+        return 'HEADER_BASED'
     
     return None
 
-def extract_accounts(content):
-    """Extract individual accounts from file content using smart detection"""
-    # Try to detect separator
-    separator = detect_account_separator(content)
+def extract_accounts_from_txt(content):
+    """Extract individual accounts from .txt file content"""
+    # First, try to find a separator
+    separator = find_account_separator(content)
     
-    if separator and separator != 'LINE_BASED':
+    accounts = []
+    
+    if separator and separator != 'HEADER_BASED':
         # Split by the detected separator
         raw_accounts = content.split(separator)
-        accounts = [acc.strip() for acc in raw_accounts if acc.strip() and len(acc.strip()) > 50]
-        return accounts
-    
-    elif separator == 'LINE_BASED':
-        # Use line-based detection with account headers
+        accounts = [acc.strip() for acc in raw_accounts if acc.strip()]
+        
+    elif separator == 'HEADER_BASED':
+        # Split based on account headers
         lines = content.split('\n')
-        accounts = []
         current_account = []
-        in_account = False
         
         for line in lines:
             # Check if this line starts a new account
             is_new_account = any([
-                re.search(r'PREMIUM ACCOUNT', line, re.IGNORECASE),
                 re.search(r'ACCOUNT #\d+', line, re.IGNORECASE),
                 re.search(r'Account #\d+', line, re.IGNORECASE),
-                re.search(r'Cuenta #\d+', line, re.IGNORECASE),
-                re.search(r'Conta #\d+', line, re.IGNORECASE),
-                'Direct Login URL' in line,
-                'NetflixId=' in line and not current_account,
+                re.search(r'PREMIUM ACCOUNT', line, re.IGNORECASE),
+                re.search(r'Premium Account', line, re.IGNORECASE),
             ])
             
             if is_new_account and current_account:
-                # Save previous account
                 accounts.append('\n'.join(current_account))
                 current_account = [line]
             elif is_new_account:
                 current_account = [line]
             elif current_account:
                 current_account.append(line)
+            elif 'NetflixId=' in line and not current_account:
+                # If we find a NetflixId without a header, start a new account
+                current_account = [line]
         
-        # Add the last account
         if current_account:
             accounts.append('\n'.join(current_account))
-        
-        return accounts
     
     else:
-        # No clear separator, try to find NetflixId patterns
-        lines = content.split('\n')
-        accounts = []
-        current_account = []
-        
-        for line in lines:
-            if 'NetflixId=' in line and not current_account:
-                current_account = [line]
-            elif 'NetflixId=' in line and current_account:
-                accounts.append('\n'.join(current_account))
-                current_account = [line]
-            elif current_account:
-                current_account.append(line)
-        
-        if current_account:
-            accounts.append('\n'.join(current_account))
-        
-        return accounts
+        # No clear separation, try to split by NetflixId occurrences
+        # Each occurrence of NetflixId might indicate a new account
+        parts = re.split(r'(?=NetflixId=)', content)
+        accounts = [part.strip() for part in parts if 'NetflixId=' in part]
+    
+    # Filter out empty accounts
+    accounts = [acc for acc in accounts if acc and len(acc) > 10]
+    
+    return accounts
 
-def parse_account(account_text):
-    """Parse a single account (multi-line) in ANY language"""
+def extract_netflix_id(text):
+    """Extract NetflixId from ANY text - this is the ONLY essential part"""
+    # Try multiple patterns to find NetflixId
+    patterns = [
+        r'NetflixId=([^&\s\'"]+)',  # Standard pattern
+        r'NetflixId[=:]([^&\s\'"]+)',  # With colon instead of equals
+        r'[Nn]etflix[Ii]d[=:]([^&\s\'"]+)',  # Case insensitive
+        r'Cookie.*?NetflixId=([^&\s]+)',  # Inside Cookie field
+        r'nftoken=([^&\s]+)',  # Sometimes in URL as nftoken
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1).strip()
+    
+    return None
+
+def extract_email(text):
+    """Extract email from ANY text if present"""
+    match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', text)
+    return match.group(1).strip() if match else None
+
+def extract_field(text, field_names):
+    """Extract a field by multiple possible names (supports multiple languages)"""
+    for field_name in field_names:
+        # Pattern: field_name: value or field_name = value
+        pattern = rf'{re.escape(field_name)}[:\s=]+([^\n\r]+)'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    return None
+
+def parse_account_from_txt(account_text):
+    """Parse a single account from .txt content - extracts NetflixId and any other info available"""
     try:
         account = {}
         
-        # STEP 1: Find NetflixId (THIS IS THE MOST IMPORTANT)
-        netflix_id_match = re.search(r'NetflixId=([^&\s\'"]+)', account_text)
-        if netflix_id_match:
-            account['netflix_id'] = netflix_id_match.group(1).strip()
-            logger.info(f"✅ Found NetflixId: {account['netflix_id'][:30]}...")
-        else:
+        # STEP 1: Extract NetflixId (MANDATORY - without this, account is invalid)
+        netflix_id = extract_netflix_id(account_text)
+        if not netflix_id:
             return None
         
-        # STEP 2: Find Email in ANY language (look for @ symbol)
-        email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', account_text)
-        if email_match:
-            account['email'] = email_match.group(1).strip()
-        else:
-            account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
+        account['netflix_id'] = netflix_id
+        logger.info(f"✅ Found NetflixId: {netflix_id[:30]}...")
         
-        # STEP 3: Find Direct Login URL (if present)
+        # STEP 2: Extract email if present (OPTIONAL)
+        email = extract_email(account_text)
+        if email:
+            account['email'] = email
+        else:
+            account['email'] = f"user_{netflix_id[:8]}@unknown.com"
+        
+        # STEP 3: Extract other fields if present (OPTIONAL)
+        # Name - supports multiple languages
+        name = extract_field(account_text, ['Name', 'Nombre', 'Nome', '名前', '姓名', '이름', 'Имя'])
+        if name:
+            account['name'] = name
+        
+        # Country - supports multiple languages
+        country = extract_field(account_text, ['Country', 'País', 'Pais', '国', '国家', '나라', 'Страна'])
+        if country:
+            account['country'] = country
+        
+        # Plan - supports multiple languages
+        plan = extract_field(account_text, ['Plan', 'Plano', 'プラン', '套餐', '요금제', 'План'])
+        if plan:
+            account['plan'] = plan
+        
+        # Quality - supports multiple languages
+        quality = extract_field(account_text, ['Video Quality', 'Qualidade', '画質', '视频质量', '화질', 'Качество'])
+        if quality:
+            account['quality'] = quality
+        
+        # Max Streams
+        streams = extract_field(account_text, ['Max Streams', 'Máx. de streams', '同時視聴', '最大流', '최대 스트림', 'Макс. потоков'])
+        if streams:
+            account['max_streams'] = streams
+        
+        # Direct Login URL (if present in the text)
         url_match = re.search(r'(https?://[^\s]+nftoken=[^\s]+)', account_text)
         if url_match:
             account['direct_url'] = url_match.group(1).strip()
-            logger.info(f"✅ Found direct URL")
-        
-        # STEP 4: Find fields in ANY language using flexible patterns
-        field_patterns = {
-            'name': [
-                r'Name[:\s]*([^\n]+)',
-                r'Nombre[:\s]*([^\n]+)',
-                r'Nome[:\s]*([^\n]+)',
-                r'名前[:\s]*([^\n]+)',
-                r'氏名[:\s]*([^\n]+)',
-                r'馃懁 Name[:\s]*([^\n]+)',
-            ],
-            'country': [
-                r'Country[:\s]*([^\n]+)',
-                r'País[:\s]*([^\n]+)',
-                r'Pais[:\s]*([^\n]+)',
-                r'国[:\s]*([^\n]+)',
-                r'馃實 Country[:\s]*([^\n]+)',
-            ],
-            'plan': [
-                r'Plan[:\s]*([^\n]+)',
-                r'Plano[:\s]*([^\n]+)',
-                r'プラン[:\s]*([^\n]+)',
-                r'馃搵 Plan[:\s]*([^\n]+)',
-            ],
-            'quality': [
-                r'Video Quality[:\s]*([^\n]+)',
-                r'Qualidade[:\s]*([^\n]+)',
-                r'画質[:\s]*([^\n]+)',
-                r'馃帴 Video Quality[:\s]*([^\n]+)',
-            ],
-            'max_streams': [
-                r'Max Streams[:\s]*([^\n]+)',
-                r'Máx. de streams[:\s]*([^\n]+)',
-                r'同時視聴[:\s]*([^\n]+)',
-                r'馃摵 Max Streams[:\s]*([^\n]+)',
-            ],
-            'price': [
-                r'Price[:\s]*([^\n]+)',
-                r'Precio[:\s]*([^\n]+)',
-                r'Preço[:\s]*([^\n]+)',
-                r'料金[:\s]*([^\n]+)',
-                r'馃挵 Price[:\s]*([^\n]+)',
-            ],
-            'member_since': [
-                r'Member Since[:\s]*([^\n]+)',
-                r'Miembro desde[:\s]*([^\n]+)',
-                r'Membro desde[:\s]*([^\n]+)',
-                r'入会日[:\s]*([^\n]+)',
-                r'馃搮 Member Since[:\s]*([^\n]+)',
-            ],
-            'next_billing': [
-                r'Next Billing Date[:\s]*([^\n]+)',
-                r'Próxima facturación[:\s]*([^\n]+)',
-                r'Próximo pagamento[:\s]*([^\n]+)',
-                r'次回請求日[:\s]*([^\n]+)',
-                r'馃搮 Next Billing Date[:\s]*([^\n]+)',
-            ],
-            'payment_method': [
-                r'Payment Method[:\s]*([^\n]+)',
-                r'Método de pago[:\s]*([^\n]+)',
-                r'Método de pagamento[:\s]*([^\n]+)',
-                r'支払い方法[:\s]*([^\n]+)',
-                r'馃挸 Payment Method[:\s]*([^\n]+)',
-            ],
-            'card_brand': [
-                r'Card Brand[:\s]*([^\n]+)',
-                r'Marca de tarjeta[:\s]*([^\n]+)',
-                r'Bandeira do cartão[:\s]*([^\n]+)',
-                r'カードブランド[:\s]*([^\n]+)',
-                r'馃彟 Card Brand[:\s]*([^\n]+)',
-            ],
-            'last4': [
-                r'Last 4 Digits[:\s]*([^\n]+)',
-                r'Últimos 4 dígitos[:\s]*([^\n]+)',
-                r'Últimos 4 dígitos[:\s]*([^\n]+)',
-                r'下4桁[:\s]*([^\n]+)',
-                r'馃敘 Last 4 Digits[:\s]*([^\n]+)',
-            ],
-            'phone': [
-                r'Phone[:\s]*([^\n]+)',
-                r'Teléfono[:\s]*([^\n]+)',
-                r'Telefone[:\s]*([^\n]+)',
-                r'電話番号[:\s]*([^\n]+)',
-                r'馃摓 Phone[:\s]*([^\n]+)',
-            ],
-        }
-        
-        for key, patterns in field_patterns.items():
-            for pattern in patterns:
-                match = re.search(pattern, account_text, re.IGNORECASE)
-                if match:
-                    account[key] = match.group(1).strip()
-                    break
         
         return account
         
@@ -393,16 +346,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📤 **Send me a .txt file** with Netflix accounts
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🌍 **Works with ANY language!**
-🇺🇸 English | 🇪🇸 Spanish | 🇧🇷 Portuguese | 🇯🇵 Japanese | 🇮🇳 Hindi | 🇫🇷 French | 🇩🇪 German | 🇨🇳 Chinese
-
-📋 **Any format works!** I'll automatically:
-✅ Detect account separators automatically
-✅ Extract Netflix ID from ANY format
-✅ Support multi-line accounts
-✅ Work with emojis and special characters
+📋 **Any .txt format works!** I'll automatically:
+✅ Find Netflix cookies anywhere in the text
+✅ Extract NetflixId= from any format
 ✅ Check validity with official API
 ✅ Send premium login links
+✅ Show detailed statistics
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Commands:**
@@ -429,39 +378,25 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1️⃣ **Prepare your .txt file**
-   • ANY language is accepted!
-   • ANY format works!
+   • ANY format is accepted!
+   • Write anything you want
    • Just make sure it contains `NetflixId=...`
 
-2️⃣ **Send the file to me**
-   • I'll automatically detect accounts
+2️⃣ **Send the .txt file to me**
+   • I'll automatically find all Netflix cookies
    • Process each account
    • Only valid accounts will be sent
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🌍 **SUPPORTED LANGUAGES:**
+📝 **EXAMPLES OF ACCEPTED FORMATS:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✓ English (Plan, Name, Country)
-✓ Spanish (Plan, Nombre, País)
-✓ Portuguese (Plano, Nome, País)
-✓ Japanese (プラン, 名前, 国)
-✓ French (Forfait, Nom, Pays)
-✓ German (Plan, Name, Land)
-✓ Italian (Piano, Nome, Paese)
-✓ Hindi (योजना, नाम, देश)
-✓ Chinese (套餐, 姓名, 国家)
-✓ Korean (요금제, 이름, 국가)
-✓ Russian (План, Имя, Страна)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📝 **SUPPORTED FORMATS:**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✓ Emoji format (馃敼, 馃搧, 馃崻)
-✓ Text format (Name:, Country:, Plan:)
-✓ JSON format
-✓ CSV format
-✓ Raw cookie format
-✓ Mixed formats
+✓ `email:password | NetflixCookies = NetflixId=...`
+✓ `馃崻 Cookie: NetflixId=...` (emoji format)
+✓ `NetflixId=v%3D3%26ct%3D...` (raw format)
+✓ `Some random text... NetflixId=... more text`
+✓ Multi-line accounts with any separators
+✓ Any language (English, Spanish, Japanese, etc.)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⌨️ **COMMANDS:**
@@ -526,10 +461,10 @@ You can now upload a new file.
         parse_mode='Markdown'
     )
 
-# ==================== FILE HANDLER WITH UNIVERSAL SUPPORT ====================
+# ==================== FILE HANDLER - ONLY .TXT FILES ====================
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle uploaded .txt files - supports ANY language and format"""
+    """Handle uploaded .txt files - supports ANY content inside"""
     user_id = update.effective_user.id
     global total_checks, valid_accounts, invalid_accounts
     
@@ -552,6 +487,8 @@ Please wait a minute before trying again.
         return
     
     document = update.message.document
+    
+    # ONLY accept .txt files
     if not document.file_name.endswith('.txt'):
         await update.message.reply_text(
             f"""
@@ -560,7 +497,7 @@ Please wait a minute before trying again.
 ╚════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Please upload a `.txt` file.
+Please upload a `.txt` file only.
 
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -592,8 +529,8 @@ Please upload a `.txt` file.
         file_content = await file.download_as_bytearray()
         content = file_content.decode('utf-8', errors='ignore')
         
-        # Extract accounts using smart detection
-        accounts = extract_accounts(content)
+        # Extract accounts from the .txt file (any format)
+        accounts = extract_accounts_from_txt(content)
         
         if not accounts:
             await status_msg.edit_text(
@@ -603,9 +540,9 @@ Please upload a `.txt` file.
 ╚════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-No accounts with NetflixId= were found.
+No Netflix cookies (NetflixId=) were found in your file.
 
-💡 **Make sure your file contains NetflixId=**
+💡 **Make sure your .txt file contains NetflixId=...**
 
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -622,10 +559,10 @@ No accounts with NetflixId= were found.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📄 **File:** `{document.file_name}`
-📝 **Found:** `{len(accounts)}` accounts
+📝 **Found:** `{len(accounts)}` potential accounts
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔄 **Processing each account...**
+🔄 **Extracting Netflix cookies...**
 
 ⚡ **Powered by {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -639,8 +576,8 @@ No accounts with NetflixId= were found.
         valid_accounts_found = []
         
         for i, account_block in enumerate(accounts, 1):
-            # Parse the account (multi-language support)
-            account = parse_account(account_block)
+            # Parse the account - extract NetflixId and any other info
+            account = parse_account_from_txt(account_block)
             
             if not account:
                 invalid_count += 1
@@ -689,7 +626,6 @@ No accounts with NetflixId= were found.
                 # Store valid account
                 valid_accounts_found.append({
                     'email': email,
-                    'password': account.get('password', 'N/A'),
                     'login_url': result['login_url'],
                     'country': account.get('country', 'N/A'),
                     'plan': account.get('plan', 'N/A'),
@@ -734,6 +670,21 @@ No accounts with NetflixId= were found.
         # Send ALL valid accounts
         if valid_accounts_found:
             for idx, acc in enumerate(valid_accounts_found, 1):
+                # Build account details string
+                details = []
+                if acc.get('name') and acc['name'] != 'N/A':
+                    details.append(f"• **Name:** `{acc['name']}`")
+                if acc.get('country') and acc['country'] != 'N/A':
+                    details.append(f"• **Country:** `{acc['country']}`")
+                if acc.get('plan') and acc['plan'] != 'N/A':
+                    details.append(f"• **Plan:** `{acc['plan']}`")
+                if acc.get('quality') and acc['quality'] != 'N/A':
+                    details.append(f"• **Quality:** `{acc['quality']}`")
+                if acc.get('streams') and acc['streams'] != 'N/A':
+                    details.append(f"• **Max Streams:** `{acc['streams']}`")
+                
+                details_str = '\n'.join(details) if details else '• No additional details found'
+                
                 premium_msg = f"""
 ╔════════════════════════════════════════╗
 ║     ✅ VALID ACCOUNT #{idx}/{valid_count} ✅     ║
@@ -743,11 +694,7 @@ No accounts with NetflixId= were found.
 📧 **ACCOUNT DETAILS**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • **Email:** `{acc['email']}`
-• **Name:** `{acc.get('name', 'N/A')}`
-• **Country:** `{acc.get('country', 'N/A')}`
-• **Plan:** `{acc.get('plan', 'N/A')}`
-• **Quality:** `{acc.get('quality', 'N/A')}`
-• **Max Streams:** `{acc.get('streams', 'N/A')}`
+{details_str}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔗 **LOGIN LINK**
@@ -797,7 +744,7 @@ No accounts with NetflixId= were found.
 No valid accounts were found in your file.
 
 💡 **Suggestions:**
-• Make sure file contains NetflixId=
+• Make sure file contains valid NetflixId=
 • Get fresh Netflix cookies
 • Try again later
 
@@ -855,8 +802,9 @@ async def run_bot():
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
     print("🤖 Bot is starting...")
-    print("🌍 Universal Multi-Language Parser Enabled")
-    print("📝 Supports: English, Spanish, Portuguese, Japanese, and more!")
+    print("📝 Universal .txt Parser Enabled")
+    print("✅ Only accepts .txt files")
+    print("🌍 Works with ANY content inside")
     print("=" * 60)
     
     # Create application with custom settings
@@ -888,7 +836,7 @@ async def run_bot():
         )
         print("✅ Bot started successfully!")
         print("=" * 60)
-        print("🤖 Bot is now running! Waiting for files...")
+        print("🤖 Bot is now running! Waiting for .txt files...")
         print("=" * 60)
         
         while True:
