@@ -22,8 +22,8 @@ TOKEN = os.getenv('BOT_TOKEN')
 API_URL = "http://104.223.121.139:6969/api/gen"  # YOUR API
 SECRET_KEY = "IpYDCxU9VAxqi88ByaVscqTNDJPg7Cg5"  # YOUR SECRET KEY
 
-# YOUR CREDIT
-YOUR_CREDIT = "@CrackByLIM"
+# YOUR CREDIT - Changed to your cool name
+YOUR_CREDIT = "LIM 🚀"
 
 # ==================== AUTHORIZED USERS ====================
 AUTHORIZED_USERS = [1058484190, 6247762383]  # Only these users can use the bot
@@ -45,7 +45,7 @@ LANGUAGES = {
         'clear': 'Clear',
         'language': 'Language',
         'processing': 'Processing',
-        'valid': '✅ READY TO USE',
+        'valid': '✅ NETFLIX ACCOUNT',
         'invalid': '❌ NOT WORKING',
         'email': 'Email',
         'password': 'Password',
@@ -54,18 +54,18 @@ LANGUAGES = {
         'plan': 'Plan',
         'quality': 'Quality',
         'streams': 'Max Streams',
-        'login_link': 'Your Netflix Link',
-        'launch': '🎬 CLICK HERE TO WATCH',
+        'login_link': 'Login Link',
+        'launch': '🎬 OPEN NETFLIX',
         'powered_by': 'Powered by',
         'file_received': '📁 FILE RECEIVED',
         'analyzing': '🔍 ANALYZING',
-        'complete': '✨ ALL DONE',
+        'complete': '✨ COMPLETE',
         'results': 'RESULTS',
         'valid_found': 'Working Accounts',
         'invalid_found': 'Not Working',
         'success_rate': 'Success Rate',
         'no_valid': 'No working accounts found',
-        'error_occurred': '⚠️ Oops!',
+        'error_occurred': '⚠️ Error',
         'rate_limit': 'Please wait a moment',
         'wrong_format': 'Please upload a .txt file',
         'member_since': 'Member Since',
@@ -74,128 +74,20 @@ LANGUAGES = {
         'extra_member': 'Extra Member',
         'check_command': 'Check Netflix',
         'enter_cookie': 'Please enter your Netflix code',
-        'checking': '⏳ Checking your code...',
-        'cookie_valid': '✅ GOOD NEWS!',
-        'cookie_invalid': '❌ SORRY!',
+        'checking': '⏳ Checking...',
+        'cookie_valid': '✅ NETFLIX ACCOUNT',
+        'cookie_invalid': '❌ INVALID',
         'how_to_use': 'HOW TO USE',
-        'instruction': '👇 Click the big button below to start watching',
+        'instruction': '👇 Click the button below to open Netflix',
         'unauthorized': '⛔ Access Denied',
         'no_permission': 'You are not authorized to use this bot.',
-        'click_to_open': '🎬 CLICK HERE TO WATCH NETFLIX',
-        'command_deleted': '✅ Your command has been deleted',
-        'your_code': 'Your code',
-        'simple_instruction': 'Just click the button below and enjoy!',
-        'valid_message': 'Your Netflix account is ready! Click the button to start watching.',
-        'invalid_message': 'This Netflix code is not working anymore. Please try another one.',
-        'link_hidden': '✨ Your special link is ready below',
-    },
-    'zh': {
-        'name': '中文',
-        'flag': '🇨🇳',
-        'welcome': '欢迎',
-        'start': '开始',
-        'help': '帮助',
-        'stats': '统计',
-        'clear': '清除',
-        'language': '语言',
-        'processing': '处理中',
-        'valid': '✅ 可以使用',
-        'invalid': '❌ 无法使用',
-        'email': '邮箱',
-        'password': '密码',
-        'country': '国家',
-        'phone': '电话',
-        'plan': '套餐',
-        'quality': '画质',
-        'streams': '最大流',
-        'login_link': '您的Netflix链接',
-        'launch': '🎬 点击观看',
-        'powered_by': '技术支持',
-        'file_received': '📁 已接收文件',
-        'analyzing': '🔍 分析中',
-        'complete': '✨ 完成',
-        'results': '结果',
-        'valid_found': '可用账户',
-        'invalid_found': '无效账户',
-        'success_rate': '成功率',
-        'no_valid': '未找到可用账户',
-        'error_occurred': '⚠️ 出错了',
-        'rate_limit': '请稍等片刻',
-        'wrong_format': '请上传.txt文件',
-        'member_since': '加入时间',
-        'payment_method': '支付方式',
-        'next_billing': '下次计费',
-        'extra_member': '额外成员',
-        'check_command': '检查Netflix',
-        'enter_cookie': '请输入您的Netflix代码',
-        'checking': '⏳ 正在检查您的代码...',
-        'cookie_valid': '✅ 好消息！',
-        'cookie_invalid': '❌ 抱歉！',
-        'how_to_use': '使用方法',
-        'instruction': '👇 点击下方按钮开始观看',
-        'unauthorized': '⛔ 访问被拒绝',
-        'no_permission': '您无权使用此机器人。',
-        'click_to_open': '🎬 点击观看Netflix',
-        'command_deleted': '✅ 您的命令已删除',
-        'your_code': '您的代码',
-        'simple_instruction': '点击下方按钮即可观看！',
-        'valid_message': '您的Netflix账号已就绪！点击按钮开始观看。',
-        'invalid_message': '此Netflix代码已失效，请尝试其他代码。',
-        'link_hidden': '✨ 您的专属链接已准备好',
-    },
-    'km': {
-        'name': 'ខ្មែរ',
-        'flag': '🇰🇭',
-        'welcome': 'ស្វាគមន៍',
-        'start': 'ចាប់ផ្តើម',
-        'help': 'ជំនួយ',
-        'stats': 'ស្ថិតិ',
-        'clear': 'សម្អាត',
-        'language': 'ភាសា',
-        'processing': 'កំពុងដំណើរការ',
-        'valid': '✅ អាចប្រើបាន',
-        'invalid': '❌ មិនអាចប្រើបាន',
-        'email': 'អ៊ីមែល',
-        'password': 'ពាក្យសម្ងាត់',
-        'country': 'ប្រទេស',
-        'phone': 'ទូរស័ព្ទ',
-        'plan': 'កញ្ចប់',
-        'quality': 'គុណភាព',
-        'streams': 'ស្ទ្រីម',
-        'login_link': 'តំណ Netflix របស់អ្នក',
-        'launch': '🎬 ចុចទីនេះដើម្បីទស្សនា',
-        'powered_by': 'ដំណើរការដោយ',
-        'file_received': '📁 បានទទួលឯកសារ',
-        'analyzing': '🔍 កំពុងវិភាគ',
-        'complete': '✨ រួចរាល់',
-        'results': 'លទ្ធផល',
-        'valid_found': 'គណនីដែលអាចប្រើបាន',
-        'invalid_found': 'មិនអាចប្រើបាន',
-        'success_rate': 'អត្រាជោគជ័យ',
-        'no_valid': 'រកមិនឃើញគណនីដែលអាចប្រើបានទេ',
-        'error_occurred': '⚠់ មានបញ្ហា',
-        'rate_limit': 'សូមរង់ចាំបន្តិច',
-        'wrong_format': 'សូមផ្ញើឯកសារ .txt',
-        'member_since': 'សមាជិកតាំងពី',
-        'payment_method': 'វិធីបង់ប្រាក់',
-        'next_billing': 'វិក្កយបត្របន្ទាប់',
-        'extra_member': 'សមាជិកបន្ថែម',
-        'check_command': 'ពិនិត្យ Netflix',
-        'enter_cookie': 'សូមបញ្ចូលកូដ Netflix របស់អ្នក',
-        'checking': '⏳ កំពុងពិនិត្យកូដរបស់អ្នក...',
-        'cookie_valid': '✅ ដំណឹងល្អ!',
-        'cookie_invalid': '❌ សូមទោស!',
-        'how_to_use': 'របៀបប្រើ',
-        'instruction': '👇 ចុចប៊ូតុងខាងក្រោមដើម្បីចាប់ផ្តើមទស្សនា',
-        'unauthorized': '⛔ គ្មានការអនុញ្ញាត',
-        'no_permission': 'អ្នកមិនត្រូវបានអនុញ្ញាតឱ្យប្រើប្រាស់ម៉ាស៊ីននេះទេ។',
-        'click_to_open': '🎬 ចុចទីនេះដើម្បីទស្សនា Netflix',
-        'command_deleted': '✅ ពាក្យបញ្ជារបស់អ្នកត្រូវបានលុប',
-        'your_code': 'កូដរបស់អ្នក',
-        'simple_instruction': 'គ្រាន់តែចុចប៊ូតុងខាងក្រោមហើយរីករាយ!',
-        'valid_message': 'គណនី Netflix របស់អ្នករួចរាល់! ចុចប៊ូតុងដើម្បីចាប់ផ្តើមទស្សនា។',
-        'invalid_message': 'កូដ Netflix នេះលែងដំណើរការហើយ។ សូមព្យាយាមកូដផ្សេងទៀត។',
-        'link_hidden': '✨ តំណពិសេសរបស់អ្នកបានត្រៀមរួចរាល់',
+        'click_to_open': '🎬 OPEN NETFLIX',
+        'your_code': 'Code',
+        'simple_instruction': 'Click the button below to start watching',
+        'valid_message': 'Here is your Netflix Account',
+        'invalid_message': 'This Netflix code is not working anymore',
+        'link_label': 'Login Link',
+        'credit_line': 'LIM 🚀',
     }
 }
 
@@ -207,7 +99,6 @@ def clear_telegram_webhook():
         response = requests.post(webhook_url)
         print(f"✅ Webhook cleared: {response.json()}")
         
-        # Also clear any pending updates
         get_updates_url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
         requests.post(get_updates_url, json={"offset": -1, "timeout": 0})
         print("✅ Pending updates cleared")
@@ -251,7 +142,6 @@ async def delete_user_command(context: ContextTypes.DEFAULT_TYPE):
 def schedule_command_deletion(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int = 3):
     """Schedule the user's command message for deletion"""
     try:
-        # Check if job_queue exists and is properly initialized
         if context.job_queue:
             context.job_queue.run_once(
                 delete_user_command,
@@ -260,9 +150,6 @@ def schedule_command_deletion(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 
                 chat_id=chat_id,
                 name=f"delete_cmd_{message_id}"
             )
-            logger.info(f"✅ Scheduled deletion for message {message_id}")
-        else:
-            logger.warning("⚠️ JobQueue not available, cannot schedule deletion")
     except Exception as e:
         logger.error(f"Error scheduling deletion: {e}")
 
@@ -276,30 +163,20 @@ def authorized_only(func):
             
         user_id = update.effective_user.id
         
-        # Check if user is authorized
         if user_id not in AUTHORIZED_USERS:
-            lang_code = get_lang(user_id)
-            lang = LANGUAGES[lang_code]
-            
-            logger.warning(f"🚫 Unauthorized access attempt by user ID: {user_id}")
-            
-            # Send unauthorized message
             await update.message.reply_text(
-                f"**{lang['unauthorized']}**\n\n{lang['no_permission']}",
+                f"**⛔ Access Denied**\n\nYou are not authorized to use this bot.",
                 parse_mode='Markdown'
             )
             return
         
-        # User is authorized, proceed with the original function
         return await func(update, context, *args, **kwargs)
     return wrapper
 
 # ==================== NETFLIX ID EXTRACTOR ====================
 
 def extract_netflix_id_from_cookie(cookie_text):
-    """
-    Extract NetflixId from various cookie formats
-    """
+    """Extract NetflixId from various cookie formats"""
     if not cookie_text:
         return None
     
@@ -321,9 +198,7 @@ def extract_netflix_id_from_cookie(cookie_text):
 # ==================== ENHANCED FORMAT PARSER ====================
 
 def parse_account_line(line):
-    """
-    Parse a single line in either format
-    """
+    """Parse a single line in either format"""
     try:
         line = line.strip()
         if not line:
@@ -331,11 +206,9 @@ def parse_account_line(line):
         
         account = {}
         
-        # First, extract email:password from the beginning
         parts = line.split('|', 1)
         first_part = parts[0].strip()
         
-        # Parse email:password
         if ':' in first_part:
             email_pass = first_part.split(':', 1)
             account['email'] = email_pass[0].strip()
@@ -346,13 +219,10 @@ def parse_account_line(line):
                 account['email'] = email_pass_match.group(1).strip()
                 account['password'] = email_pass_match.group(2).strip()
         
-        # If we have more parts after the first |
         if len(parts) > 1:
             remaining = parts[1]
             
-            # Check which format we're dealing with
             if '=' in remaining and ':' not in remaining:
-                # Format 2: Using = as separator
                 fields = remaining.split('|')
                 for field in fields:
                     field = field.strip()
@@ -384,7 +254,6 @@ def parse_account_line(line):
                             account['payment_method'] = value
             
             else:
-                # Format 1: Using : as separator
                 fields = remaining.split('|')
                 for field in fields:
                     field = field.strip()
@@ -403,7 +272,6 @@ def parse_account_line(line):
                             if netflix_id:
                                 account['netflix_id'] = netflix_id
         
-        # If we still don't have netflix_id, try to find it anywhere in the line
         if 'netflix_id' not in account:
             netflix_id = extract_netflix_id_from_cookie(line)
             if netflix_id:
@@ -491,16 +359,11 @@ async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in AUTHORIZED_USERS:
         return
     
-    # Schedule command deletion
     schedule_command_deletion(context, update.effective_chat.id, update.message.message_id, 3)
     
     keyboard = [
         [
             InlineKeyboardButton(f"{LANGUAGES['en']['flag']} English", callback_data='lang_en'),
-            InlineKeyboardButton(f"{LANGUAGES['zh']['flag']} 中文", callback_data='lang_zh'),
-        ],
-        [
-            InlineKeyboardButton(f"{LANGUAGES['km']['flag']} ខ្មែរ", callback_data='lang_km'),
         ]
     ]
     
@@ -545,8 +408,7 @@ def get_lang(user_id):
 
 @authorized_only
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start command with clean output"""
-    # Schedule command deletion
+    """Start command"""
     schedule_command_deletion(context, update.effective_chat.id, update.message.message_id, 3)
     
     user = update.effective_user
@@ -556,22 +418,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     welcome = f"""
 ╔══════════════════════════════════════╗
-║        🎬 **NETFLIX ACCESS** 🎬       ║
+║        🎬 **NETFLIX CHECKER** 🎬      ║
 ╚══════════════════════════════════════╝
 
-👋 **{lang['welcome']} {user.first_name}!**
+👋 **Welcome {user.first_name}!**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📤 **Send a .txt file** with your accounts
-🔍 **Or use /check** for a single code
+📤 **Send a .txt file** with accounts
+🔍 **Or use /check** for single code
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 **Need help?** Use /help
-📊 **See stats?** Use /stats
-🌐 **Change language?** Use /language
+💡 Use /help for instructions
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✨ {lang['powered_by']} {YOUR_CREDIT} ✨
+✨ {YOUR_CREDIT} ✨
     """
     
     await update.message.reply_text(welcome, parse_mode='Markdown')
@@ -579,32 +439,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @authorized_only
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Help command"""
-    # Schedule command deletion
     schedule_command_deletion(context, update.effective_chat.id, update.message.message_id, 3)
-    
-    user_id = update.effective_user.id
-    lang_code = get_lang(user_id)
-    lang = LANGUAGES[lang_code]
     
     help_text = f"""
 ╔══════════════════════════════════════╗
-║          🆘 **QUICK GUIDE** 🆘         ║
+║          🆘 **HELP** 🆘               ║
 ╚══════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 **Option 1: Upload File**
-Send a .txt file with this format:
-`email:pass | Country=US | NetflixCookies=NetflixId=...`
+📁 **Upload File:**
+Send a .txt file with accounts
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔍 **Option 2: Single Check**
-Use: `/check YOUR_NETFLIX_ID`
+🔍 **Single Check:**
+`/check YOUR_NETFLIX_ID`
 
 Example:
 `/check v%3D3%26ct%3DBgjH...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✨ {lang['powered_by']} {YOUR_CREDIT} ✨
+✨ {YOUR_CREDIT} ✨
     """
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
@@ -612,28 +465,24 @@ Example:
 @authorized_only
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show statistics"""
-    # Schedule command deletion
     schedule_command_deletion(context, update.effective_chat.id, update.message.message_id, 3)
     
     global total_checks, valid_accounts, invalid_accounts
-    user_id = update.effective_user.id
-    lang_code = get_lang(user_id)
-    lang = LANGUAGES[lang_code]
     
     success_rate = valid_accounts/total_checks*100 if total_checks > 0 else 0
     
     stats_text = f"""
 ╔══════════════════════════════════════╗
-║         📊 **STATISTICS** 📊          ║
+║         📊 **STATS** 📊               ║
 ╚══════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ **{lang['valid_found']}:** `{valid_accounts}`
-❌ **{lang['invalid_found']}:** `{invalid_accounts}`
-📈 **{lang['success_rate']}:** `{success_rate:.1f}%`
+✅ **Valid:** `{valid_accounts}`
+❌ **Invalid:** `{invalid_accounts}`
+📈 **Success:** `{success_rate:.1f}%`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✨ {lang['powered_by']} {YOUR_CREDIT} ✨
+✨ {YOUR_CREDIT} ✨
     """
     
     await update.message.reply_text(stats_text, parse_mode='Markdown')
@@ -641,64 +490,56 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @authorized_only
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Clear user session"""
-    # Schedule command deletion
     schedule_command_deletion(context, update.effective_chat.id, update.message.message_id, 3)
     
     user_id = update.effective_user.id
-    lang_code = get_lang(user_id)
-    lang = LANGUAGES[lang_code]
     
     if user_id in user_sessions:
         lang_pref = user_sessions[user_id].get('language', 'en')
         user_sessions[user_id] = {'language': lang_pref}
     
     await update.message.reply_text(
-        f"✅ **Ready!**\n\nYou can now upload a new file.",
+        f"✅ **Ready!**\n\nYou can upload a new file.",
         parse_mode='Markdown'
     )
 
-# ==================== CHECK COMMAND (FRIENDLY VERSION) ====================
+# ==================== CHECK COMMAND (UPDATED VERSION) ====================
 
 @authorized_only
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Check a single Netflix ID - FRIENDLY VERSION"""
+    """Check a single Netflix ID"""
     user_id = update.effective_user.id
     lang_code = get_lang(user_id)
     lang = LANGUAGES[lang_code]
     
     global total_checks, valid_accounts, invalid_accounts
     
-    # Schedule command deletion (delete after 3 seconds)
     schedule_command_deletion(context, update.effective_chat.id, update.message.message_id, 3)
     
     if not check_rate_limit(user_id):
         await update.message.reply_text(
-            f"⏰ **{lang['rate_limit']}**",
+            f"⏰ **Please wait a moment**",
             parse_mode='Markdown'
         )
         return
     
     if not context.args:
-        friendly_error = f"""
+        error_msg = f"""
 ╔══════════════════════════════════════╗
 ║        ❓ **HOW TO USE** ❓            ║
 ╚══════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📝 Just type: `/check` followed by your code
+📝 Type: `/check` followed by your code
 
-**Example:**
+Example:
 `/check v%3D3%26ct%3DBgjH...`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 **Don't have a code?** Get one first!
         """
-        await update.message.reply_text(friendly_error, parse_mode='Markdown')
+        await update.message.reply_text(error_msg, parse_mode='Markdown')
         return
     
     user_input = ' '.join(context.args)
     
-    # Clean up the input
     if 'NetflixId=' in user_input or 'netflixid=' in user_input:
         match = re.search(r'NetflixId=([^\s]+)', user_input, re.IGNORECASE)
         netflix_id = match.group(1) if match else user_input
@@ -707,18 +548,15 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     netflix_id = netflix_id.strip('"\'')
     
-    # Show friendly checking message
     checking_msg = await update.message.reply_text(
-        f"**{lang['checking']}** 🔍\n\n⏳ Just a moment...",
+        f"**⏳ Checking...** 🔍",
         parse_mode='Markdown'
     )
     
-    # Check with API
     result = await check_with_your_api(netflix_id, f"manual_{netflix_id[:8]}")
     
     total_checks += 1
     
-    # Delete checking message
     try:
         await checking_msg.delete()
     except:
@@ -727,35 +565,34 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if result.get('success'):
         valid_accounts += 1
         
-        # FRIENDLY SUCCESS MESSAGE - NO SCARY LONG URLS VISIBLE
         short_id = netflix_id[:15] + "..." if len(netflix_id) > 15 else netflix_id
         
-        friendly_success = f"""
+        # UPDATED: Cleaner output with "Here is your Netflix Account" and login link visible
+        success_msg = f"""
 ╔══════════════════════════════════════╗
-║     ✅ **{lang['cookie_valid']}** ✅     ║
+║     ✅ **NETFLIX ACCOUNT** ✅        ║
 ╚══════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎉 **{lang['valid_message']}**
+🔑 **Code:** `{short_id}`
 
-🔑 **{lang['your_code']}:**
-`{short_id}`
+🔗 **Login Link:**
+`{result['login_url']}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👇 **{lang['simple_instruction']}**
+👇 Click the button below to open
 
-✨ {lang['link_hidden']} ✨
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ {YOUR_CREDIT} ✨
         """
         
-        # Create a beautiful button - this is where the URL is hidden
         keyboard = [[InlineKeyboardButton(
-            f"🎬 {lang['click_to_open']} 🎬", 
+            "🎬 OPEN NETFLIX", 
             url=result['login_url']
         )]]
         
-        # Send friendly message with button
         await update.message.reply_text(
-            friendly_success,
+            success_msg,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
@@ -763,28 +600,26 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         invalid_accounts += 1
         
-        # FRIENDLY ERROR MESSAGE
         short_id = netflix_id[:15] + "..." if len(netflix_id) > 15 else netflix_id
         
-        friendly_error = f"""
+        error_msg = f"""
 ╔══════════════════════════════════════╗
-║     ❌ **{lang['cookie_invalid']}** ❌     ║
+║     ❌ **INVALID CODE** ❌           ║
 ╚══════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-😕 **{lang['invalid_message']}**
+🔑 **Code:** `{short_id}`
 
-🔑 **{lang['your_code']}:**
-`{short_id}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 **Try another code or get a fresh one**
+❌ This Netflix code is not working
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✨ {lang['powered_by']} {YOUR_CREDIT} ✨
+💡 Please try another code
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ {YOUR_CREDIT} ✨
         """
         
-        await update.message.reply_text(friendly_error, parse_mode='Markdown')
+        await update.message.reply_text(error_msg, parse_mode='Markdown')
 
 # ==================== FILE HANDLER ====================
 
@@ -797,12 +632,11 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     global total_checks, valid_accounts, invalid_accounts
     
-    # Schedule command deletion (delete the file message after 3 seconds)
     schedule_command_deletion(context, update.effective_chat.id, update.message.message_id, 3)
     
     if not check_rate_limit(user_id):
         await update.message.reply_text(
-            f"⏰ **{lang['rate_limit']}**",
+            f"⏰ **Please wait a moment**",
             parse_mode='Markdown'
         )
         return
@@ -811,14 +645,13 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not document.file_name.endswith('.txt'):
         await update.message.reply_text(
-            f"❌ **{lang['wrong_format']}**",
+            f"❌ **Please upload a .txt file**",
             parse_mode='Markdown'
         )
         return
     
-    # Progress message
     progress_msg = await update.message.reply_text(
-        f"**{lang['file_received']}**\n⏳ **{lang['processing']}**...",
+        f"**📁 FILE RECEIVED**\n⏳ **Processing...**",
         parse_mode='Markdown'
     )
     
@@ -831,7 +664,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         accounts = [line.strip() for line in lines if line.strip()]
         
         await progress_msg.edit_text(
-            f"**{lang['analyzing']}**\n🔍 Found: `{len(accounts)}` accounts",
+            f"**🔍 ANALYZING**\n🔍 Found: `{len(accounts)}` accounts",
             parse_mode='Markdown'
         )
         
@@ -845,10 +678,9 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 invalid_count += 1
                 continue
             
-            # Update progress every few accounts
             if i % 3 == 0 or i == len(accounts):
                 await progress_msg.edit_text(
-                    f"**{lang['processing']}**\n📊 `{i}/{len(accounts)}`\n✅ `{valid_count}` ❌ `{invalid_count}`",
+                    f"**⏳ Processing**\n📊 `{i}/{len(accounts)}`\n✅ `{valid_count}` ❌ `{invalid_count}`",
                     parse_mode='Markdown'
                 )
             
@@ -860,41 +692,38 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 valid_count += 1
                 valid_accounts += 1
                 
-                # Build details line
                 details = []
                 if account.get('country'):
                     details.append(f"🌍 {account['country']}")
                 if account.get('plan'):
                     details.append(f"📺 {account['plan']}")
-                if account.get('quality'):
-                    details.append(f"🎨 {account['quality']}")
                 
                 details_str = ' | '.join(details) if details else ''
                 
-                # FRIENDLY VALID MESSAGE
-                friendly_valid = f"""
+                # UPDATED: Cleaner output for file results
+                valid_msg = f"""
 ╔══════════════════════════════════════╗
-║     ✅ **{lang['valid']}** ✨     ║
+║     ✅ **NETFLIX ACCOUNT** ✅        ║
 ╚══════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📧 **{lang['email']}:** `{account['email']}`
+📧 **Email:** `{account['email']}`
 {details_str}
 
-🎉 **{lang['valid_message']}**
+🔗 **Login Link:**
+`{result['login_url']}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👇 **{lang['simple_instruction']}**
+👇 Click the button below to open
                 """
                 
                 keyboard = [[InlineKeyboardButton(
-                    f"🎬 {lang['click_to_open']} 🎬", 
+                    "🎬 OPEN NETFLIX", 
                     url=result['login_url']
                 )]]
                 
-                # Send valid account
                 await update.message.reply_text(
-                    friendly_valid,
+                    valid_msg,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='Markdown'
                 )
@@ -905,33 +734,35 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await asyncio.sleep(0.5)
         
-        # Final summary
         success_rate = valid_count/len(accounts)*100 if len(accounts) > 0 else 0
         
         if valid_count > 0:
             summary = f"""
 ╔══════════════════════════════════════╗
-║     **{lang['complete']}** ✨     ║
+║         **✨ COMPLETE** ✨            ║
 ╚══════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ **{lang['valid_found']}:** `{valid_count}`
-❌ **{lang['invalid_found']}:** `{invalid_count}`
-📈 **{lang['success_rate']}:** `{success_rate:.1f}%`
+✅ **Working:** `{valid_count}`
+❌ **Invalid:** `{invalid_count}`
+📈 **Success:** `{success_rate:.1f}%`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎉 **All working accounts are listed above!**
+✨ {YOUR_CREDIT} ✨
             """
         else:
             summary = f"""
 ╔══════════════════════════════════════╗
-║     **{lang['no_valid']}** ❌     ║
+║        **❌ NO WORKING** ❌          ║
 ╚══════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ **{lang['invalid_found']}:** `{invalid_count}`
+❌ **Invalid:** `{invalid_count}`
 
-💡 **No working accounts found in this file**
+💡 No working accounts found
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ {YOUR_CREDIT} ✨
             """
         
         await progress_msg.edit_text(summary, parse_mode='Markdown')
@@ -939,7 +770,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error: {e}")
         await progress_msg.edit_text(
-            f"**{lang['error_occurred']}**\n💡 Please try again",
+            f"**⚠️ Error**\n💡 Please try again",
             parse_mode='Markdown'
         )
 
@@ -956,28 +787,21 @@ def check_rate_limit(user_id, limit=5, period=60):
 # ==================== MAIN FUNCTION ====================
 
 async def run_bot():
-    """Run the bot with proper JobQueue support"""
+    """Run the bot"""
     print("=" * 50)
-    print("🎬 NETFLIX CHECKER BOT - FRIENDLY VERSION")
+    print("🎬 NETFLIX CHECKER BOT")
     print("=" * 50)
     print(f"✅ Authorized Users: {len(AUTHORIZED_USERS)}")
-    print("✅ Command auto-delete enabled")
-    print("✅ Friendly messages - no scary links")
+    print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 50)
     
-    # Clear any existing webhooks again before starting
     clear_telegram_webhook()
     
-    # Create application with job queue enabled
     app = Application.builder().token(TOKEN).build()
     
-    # Verify job queue is initialized
     if app.job_queue:
-        print("✅ JobQueue initialized successfully")
-    else:
-        print("⚠️ Warning: JobQueue not initialized")
+        print("✅ JobQueue initialized")
     
-    # Add handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("stats", stats_command))
@@ -987,11 +811,9 @@ async def run_bot():
     app.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
     app.add_handler(MessageHandler(filters.Document.FileExtension("txt"), handle_file))
     
-    # Initialize and start
     await app.initialize()
     await app.start()
     
-    # Start polling with explicit job queue support
     await app.updater.start_polling(
         drop_pending_updates=True,
         allowed_updates=['message', 'callback_query']
@@ -999,24 +821,16 @@ async def run_bot():
     
     print("✅ Bot is running!")
     print("=" * 50)
-    print("📝 Press Ctrl+C to stop")
-    print("=" * 50)
     
     try:
-        # Keep the bot running
         while True:
             await asyncio.sleep(1)
     except KeyboardInterrupt:
-        print("\n👋 Bot stopped by user")
-    except Exception as e:
-        print(f"❌ Error in main loop: {e}")
+        print("\n👋 Bot stopped")
     finally:
-        # Clean shutdown
-        print("🛑 Shutting down...")
         await app.updater.stop()
         await app.stop()
         await app.shutdown()
-        print("✅ Shutdown complete")
 
 def main():
     """Main entry point"""
