@@ -10,6 +10,7 @@ from collections import defaultdict
 import asyncio
 import re
 import json
+import urllib.parse
 
 # Load environment variables
 env_path = Path(__file__).parent / '.env'
@@ -68,6 +69,14 @@ LANGUAGES = {
         'payment_method': 'Payment Method',
         'next_billing': 'Next Billing',
         'extra_member': 'Extra Member',
+        'check_command': 'Check Single Cookie',
+        'enter_cookie': 'Please enter a Netflix cookie to check',
+        'checking': 'CHECKING COOKIE',
+        'cookie_valid': 'COOKIE VALID',
+        'cookie_invalid': 'COOKIE INVALID',
+        'extracted_id': 'Extracted Netflix ID',
+        'how_to_use_check': 'HOW TO USE /check',
+        'cookie_example': 'Cookie Example',
     },
     'zh': {
         'name': '中文',
@@ -107,6 +116,14 @@ LANGUAGES = {
         'payment_method': '支付方式',
         'next_billing': '下次计费',
         'extra_member': '额外成员',
+        'check_command': '检查单个Cookie',
+        'enter_cookie': '请输入要检查的Netflix cookie',
+        'checking': '正在检查COOKIE',
+        'cookie_valid': 'COOKIE有效',
+        'cookie_invalid': 'COOKIE无效',
+        'extracted_id': '提取的Netflix ID',
+        'how_to_use_check': '如何使用 /check',
+        'cookie_example': 'Cookie示例',
     },
     'km': {
         'name': 'ខ្មែរ',
@@ -146,6 +163,14 @@ LANGUAGES = {
         'payment_method': 'វិធីបង់ប្រាក់',
         'next_billing': 'វិក្កយបត្របន្ទាប់',
         'extra_member': 'សមាជិកបន្ថែម',
+        'check_command': 'ពិនិត្យ Cookie តែមួយ',
+        'enter_cookie': 'សូមបញ្ចូល Netflix cookie ដើម្បីពិនិត្យ',
+        'checking': 'កំពុងពិនិត្យ COOKIE',
+        'cookie_valid': 'COOKIE ត្រឹមត្រូវ',
+        'cookie_invalid': 'COOKIE មិនត្រឹមត្រូវ',
+        'extracted_id': 'Netflix ID ដែលបានទាញយក',
+        'how_to_use_check': 'របៀបប្រើ /check',
+        'cookie_example': 'ឧទាហរណ៍ Cookie',
     }
 }
 
@@ -184,6 +209,42 @@ rate_limits = defaultdict(list)
 total_checks = 0
 valid_accounts = 0
 invalid_accounts = 0
+
+# ==================== NETFLIX ID EXTRACTOR ====================
+
+def extract_netflix_id_from_cookie(cookie_text):
+    """
+    Extract NetflixId from various cookie formats
+    """
+    if not cookie_text:
+        return None
+    
+    # Try different patterns to extract NetflixId
+    patterns = [
+        r'NetflixId=([^&\s]+)',  # Standard format
+        r'netflixid=([^&\s]+)',   # Lowercase
+        r'NetflixId%3D([^&\s]+)',  # URL encoded
+        r'netflixid%3D([^&\s]+)',  # Lowercase URL encoded
+        r'["\']NetflixId["\']\s*:\s*["\']([^"\']+)',  # JSON format
+        r'NetflixId=([^;]+)',      # Cookie header format
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, cookie_text, re.IGNORECASE)
+        if match:
+            netflix_id = match.group(1).strip()
+            # URL decode if needed
+            try:
+                netflix_id = urllib.parse.unquote(netflix_id)
+            except:
+                pass
+            return netflix_id
+    
+    # If no pattern matches, maybe the whole text is the NetflixId?
+    if len(cookie_text) > 50 and '=' not in cookie_text and '&' not in cookie_text:
+        return cookie_text
+    
+    return None
 
 # ==================== ENHANCED FORMAT PARSER ====================
 
@@ -254,9 +315,9 @@ def parse_account_line(line):
                         elif 'netflixcookies' in key_lower or 'cookie' in key_lower or 'netflixid' in key_lower:
                             account['full_cookie'] = value
                             # Extract NetflixId from cookie
-                            netflix_match = re.search(r'NetflixId=([^&\s]+)', value)
-                            if netflix_match:
-                                account['netflix_id'] = netflix_match.group(1).strip()
+                            netflix_id = extract_netflix_id_from_cookie(value)
+                            if netflix_id:
+                                account['netflix_id'] = netflix_id
                         elif 'membersince' in key_lower:
                             account['member_since'] = value
                         elif 'paymentmethod' in key_lower:
@@ -283,16 +344,15 @@ def parse_account_line(line):
                         elif 'cookie' in key:
                             account['full_cookie'] = value
                             # Extract NetflixId from cookie
-                            netflix_match = re.search(r'NetflixId=([^&\s]+)', value)
-                            if netflix_match:
-                                account['netflix_id'] = netflix_match.group(1).strip()
+                            netflix_id = extract_netflix_id_from_cookie(value)
+                            if netflix_id:
+                                account['netflix_id'] = netflix_id
         
         # If we still don't have netflix_id, try to find it anywhere in the line
         if 'netflix_id' not in account:
-            # Search for NetflixId pattern anywhere in the line
-            netflix_match = re.search(r'NetflixId=([^&\s|]+)', line)
-            if netflix_match:
-                account['netflix_id'] = netflix_match.group(1).strip()
+            netflix_id = extract_netflix_id_from_cookie(line)
+            if netflix_id:
+                account['netflix_id'] = netflix_id
                 # Also try to extract email if we don't have it
                 if 'email' not in account:
                     email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', line)
@@ -320,7 +380,7 @@ def parse_account_line(line):
 
 # ==================== YOUR API FUNCTIONS ====================
 
-async def check_with_your_api(netflix_id, email):
+async def check_with_your_api(netflix_id, email="unknown@email.com"):
     """Check Netflix ID using YOUR API - with proper error handling"""
     
     if not netflix_id:
@@ -498,6 +558,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ Real-time progress tracking
 ✅ Detailed statistics
 ✅ Supports multiple formats
+✅ **NEW: /check command for single cookie validation**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Commands:**
@@ -505,6 +566,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /stats - {lang['stats']} 📊
 /language - {lang['language']} 🌐
 /clear - {lang['clear']} 🧹
+/check - {lang['check_command']} 🔍
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
@@ -528,23 +590,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📁 **HOW TO USE / 使用方法 / របៀបប្រើ**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1️⃣ **Prepare your .txt file**
-   • One account per line
-   • Use | to separate fields
-   • Must include NetflixId in cookies
-
-2️⃣ **Supported Formats:**
-
-📌 **Format 1 (with :):**
-`email:password | Phone: number | Country: name | Cookie: NetflixId=...`
-
-📌 **Format 2 (with =):**
-`email:password | Country = USA | PhoneNumber = 123456 | Plan = Premium | VideoQuality = UHD | MaxStreams = 4 | NetflixCookies = NetflixId=...`
+1️⃣ **Upload .txt file** with multiple accounts
+2️⃣ **OR use /check command** for single cookie
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📝 **Example / 例子 / ឧទាហរណ៍:**
+🔍 **{lang['how_to_use_check']}:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`user@gmail.com:pass123 | Country = United States 🇺🇸 | PhoneNumber = 123-456-7890 | Plan = Premium | VideoQuality = UHD | MaxStreams = 4 | NetflixCookies = NetflixId=v%3D3%26ct%3D...`
+`/check NetflixId=v%3D3%26ct%3D...`
+
+{lang['cookie_example']}:
+`/check NetflixId=v%3D3%26ct%3DBgjHlOvcAxL7As1J8J9LYv4vKLR4npPUavCpTp4WRErFit1m4Lziy5TudFyhWf2b5h9K0wskC86QohevyPBrJFrbfH72JwMNmKN0whelCd1cmWpZT0rJ29MHMwFZDySfF5TKCLAnGObhzofhleX2I7i3p2kVhBNRWBNABUIuPNZVhhGqozDjBknkZkXwZO4wiTfORPdBzdEGq5V3NZZnYTturjPlopfMw_mRbOJrP6Ps4DQfYNCfjtIH77AyySXT5wbO6qnNZqcVYG0XiSEPG02Q8IWY6TLX1zBINS5pI6-n3lKFV-hyuKzA4ftNmzpwdo1GZTSkgAu6q-FKoQOIAxkThlhCKbzyCoQlcmE-bsxtNxQ7UCahly9M8-lN6D4TbFL0GwNo4BlyMX_b4P-3uA9oCIyV-acyKE4945VbqTPHpLVKLzfUNa4e5-GEdvl9UXoxCMdZCOYItzCtsB2myXehcI0gbIYqe2qkYQfqWKPFgZPcxoGzcESuh9kKavt1zfc-5hMYBiIOCgxH-brBzf5oNb--YHo.%26pg%3DCHWFRMA5FJFGRF4M2RTU2U3CJI%26ch%3DAQEAEAABABSpV7B-qaZtKu4KOMgwROjK_chiZCTB4wU.`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 **Error Messages / 错误信息 / សារកំហុស:**
@@ -606,6 +661,146 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ **{lang['clear']}**\n\nYou can now upload a new file.",
         parse_mode='Markdown'
     )
+
+# ==================== NEW CHECK COMMAND ====================
+
+async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Check a single Netflix cookie manually"""
+    user_id = update.effective_user.id
+    lang_code = get_lang(user_id)
+    lang = LANGUAGES[lang_code]
+    
+    global total_checks, valid_accounts, invalid_accounts
+    
+    # Check rate limit
+    if not check_rate_limit(user_id):
+        await update.message.reply_text(
+            f"⏰ **{lang['rate_limit']}**",
+            parse_mode='Markdown'
+        )
+        return
+    
+    # Get the cookie from the command arguments
+    if not context.args:
+        await update.message.reply_text(
+            f"""
+╔══════════════════════════════════════════╗
+║     ❌ **MISSING COOKIE** ❌     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{lang['enter_cookie']}
+
+📝 **{lang['cookie_example']}:**
+`/check NetflixId=v%3D3%26ct%3DBgjHlOvcAxL7...`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            """,
+            parse_mode='Markdown'
+        )
+        return
+    
+    # Join all arguments to get the full cookie
+    cookie_text = ' '.join(context.args)
+    
+    # Send checking message
+    checking_msg = await update.message.reply_text(
+        f"""
+╔══════════════════════════════════════════╗
+║     🔍 **{lang['checking']}** 🔍     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏳ **Status:** Validating cookie...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+        """,
+        parse_mode='Markdown'
+    )
+    
+    # Extract Netflix ID from the cookie
+    netflix_id = extract_netflix_id_from_cookie(cookie_text)
+    
+    if not netflix_id:
+        await checking_msg.edit_text(
+            f"""
+╔══════════════════════════════════════════╗
+║     ❌ **{lang['cookie_invalid']}** ❌     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ **Error:** Could not extract Netflix ID from the provided text
+
+📝 **{lang['cookie_example']}:**
+`NetflixId=v%3D3%26ct%3DBgjHlOvcAxL7...`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            """,
+            parse_mode='Markdown'
+        )
+        return
+    
+    # Check with API
+    result = await check_with_your_api(netflix_id, f"manual_check_{netflix_id[:8]}")
+    
+    total_checks += 1
+    
+    if result.get('success'):
+        valid_accounts += 1
+        
+        # Success message
+        success_msg = f"""
+╔══════════════════════════════════════════╗
+║     ✅ **{lang['cookie_valid']}** ✅     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔑 **{lang['extracted_id']}:**
+`{netflix_id[:50]}...`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔗 **{lang['login_link']}:**
+`{result['login_url']}`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ **{lang['powered_by']} {YOUR_CREDIT}** ✨
+        """
+        
+        keyboard = [[InlineKeyboardButton(lang['launch'], url=result['login_url'])]]
+        await checking_msg.edit_text(
+            success_msg,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    else:
+        invalid_accounts += 1
+        
+        # Error message
+        error_msg = f"""
+╔══════════════════════════════════════════╗
+║     ❌ **{lang['cookie_invalid']}** ❌     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔑 **{lang['extracted_id']}:**
+`{netflix_id[:50]}...`
+
+❌ **Error:** {result.get('error', 'Unknown error')}
+📋 **Error Code:** `{result.get('error_code', 'UNKNOWN')}`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 **Note:** The cookie may be expired or invalid
+
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        """
+        
+        await checking_msg.edit_text(error_msg, parse_mode='Markdown')
 
 # ==================== FILE HANDLER WITH MULTI-LANGUAGE ====================
 
@@ -869,6 +1064,7 @@ async def run_bot():
     print("=" * 60)
     print("🌐 Languages: English, 中文, ខ្មែរ")
     print("📁 Supports multiple formats")
+    print("🔍 New: /check command for single cookies")
     print("🎨 Beautiful Premium Output")
     print("=" * 60)
     
@@ -880,6 +1076,7 @@ async def run_bot():
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("clear", clear_command))
     app.add_handler(CommandHandler("language", language_command))
+    app.add_handler(CommandHandler("check", check_command))  # NEW COMMAND
     app.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
     app.add_handler(MessageHandler(filters.Document.FileExtension("txt"), handle_file))
     
@@ -887,7 +1084,7 @@ async def run_bot():
     await app.start()
     await app.updater.start_polling(drop_pending_updates=True)
     
-    print("✅ Bot is running! Send a .txt file to test.")
+    print("✅ Bot is running! Send a .txt file or use /check command to test.")
     print("=" * 60)
     
     try:
