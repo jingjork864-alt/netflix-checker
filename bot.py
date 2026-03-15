@@ -393,7 +393,7 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
     
     try:
         # YOUR API endpoint - exactly as specified
-        url = f"{API_URL}/api/gen"
+        url = "http://104.223.121.139:6969/api/gen"
         
         # Data payload exactly as your API expects
         data = {
