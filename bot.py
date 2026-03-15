@@ -198,51 +198,6 @@ LANGUAGES = {
     }
 }
 
-# ==================== AUTO DELETE COMMAND FUNCTION ====================
-
-async def delete_user_command(context: ContextTypes.DEFAULT_TYPE):
-    """Delete the user's command message after delay"""
-    job = context.job
-    try:
-        await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
-    except Exception as e:
-        logger.error(f"Failed to delete command: {e}")
-
-def schedule_command_deletion(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int = 3):
-    """Schedule the user's command message for deletion"""
-    context.job_queue.run_once(
-        delete_user_command,
-        delay,
-        data=message_id,
-        chat_id=chat_id,
-        name=f"delete_cmd_{message_id}"
-    )
-
-# ==================== AUTHORIZATION DECORATOR ====================
-
-def authorized_only(func):
-    """Decorator to restrict access to authorized users only"""
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        user_id = update.effective_user.id
-        
-        # Check if user is authorized
-        if user_id not in AUTHORIZED_USERS:
-            lang_code = get_lang(user_id)
-            lang = LANGUAGES[lang_code]
-            
-            logger.warning(f"🚫 Unauthorized access attempt by user ID: {user_id}")
-            
-            # Send unauthorized message
-            await update.message.reply_text(
-                f"**{lang['unauthorized']}**\n\n{lang['no_permission']}",
-                parse_mode='Markdown'
-            )
-            return
-        
-        # User is authorized, proceed with the original function
-        return await func(update, context, *args, **kwargs)
-    return wrapper
-
 # ==================== FIX FOR CONFLICT ERROR ====================
 def clear_telegram_webhook():
     """Clear any existing webhook/sessions to prevent conflict"""
@@ -278,6 +233,54 @@ rate_limits = defaultdict(list)
 total_checks = 0
 valid_accounts = 0
 invalid_accounts = 0
+
+# ==================== AUTO DELETE COMMAND FUNCTION ====================
+
+async def delete_user_command(context: ContextTypes.DEFAULT_TYPE):
+    """Delete the user's command message after delay"""
+    job = context.job
+    if job and job.data:
+        try:
+            await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
+        except Exception as e:
+            logger.error(f"Failed to delete command: {e}")
+
+def schedule_command_deletion(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int = 3):
+    """Schedule the user's command message for deletion"""
+    # Check if job_queue exists
+    if context.job_queue:
+        context.job_queue.run_once(
+            delete_user_command,
+            delay,
+            data=message_id,
+            chat_id=chat_id,
+            name=f"delete_cmd_{message_id}"
+        )
+
+# ==================== AUTHORIZATION DECORATOR ====================
+
+def authorized_only(func):
+    """Decorator to restrict access to authorized users only"""
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        
+        # Check if user is authorized
+        if user_id not in AUTHORIZED_USERS:
+            lang_code = get_lang(user_id)
+            lang = LANGUAGES[lang_code]
+            
+            logger.warning(f"🚫 Unauthorized access attempt by user ID: {user_id}")
+            
+            # Send unauthorized message
+            await update.message.reply_text(
+                f"**{lang['unauthorized']}**\n\n{lang['no_permission']}",
+                parse_mode='Markdown'
+            )
+            return
+        
+        # User is authorized, proceed with the original function
+        return await func(update, context, *args, **kwargs)
+    return wrapper
 
 # ==================== NETFLIX ID EXTRACTOR ====================
 
@@ -941,7 +944,7 @@ def check_rate_limit(user_id, limit=5, period=60):
 # ==================== MAIN FUNCTION ====================
 
 async def run_bot():
-    """Run the bot"""
+    """Run the bot with proper JobQueue support"""
     print("=" * 50)
     print("🎬 NETFLIX CHECKER BOT - FRIENDLY VERSION")
     print("=" * 50)
@@ -950,6 +953,7 @@ async def run_bot():
     print("✅ Friendly messages - no scary links")
     print("=" * 50)
     
+    # Create application with job queue enabled
     app = Application.builder().token(TOKEN).build()
     
     # Add handlers
@@ -962,19 +966,29 @@ async def run_bot():
     app.add_handler(CallbackQueryHandler(language_callback, pattern="^lang_"))
     app.add_handler(MessageHandler(filters.Document.FileExtension("txt"), handle_file))
     
+    # Initialize and start
     await app.initialize()
     await app.start()
-    await app.updater.start_polling(drop_pending_updates=True)
+    
+    # Start polling
+    await app.updater.start_polling(
+        drop_pending_updates=True,
+        allowed_updates=['message', 'callback_query']
+    )
     
     print("✅ Bot is running!")
     print("=" * 50)
+    print("📝 Press Ctrl+C to stop")
+    print("=" * 50)
     
     try:
+        # Keep the bot running
         while True:
             await asyncio.sleep(1)
     except KeyboardInterrupt:
-        print("\n👋 Bot stopped")
+        print("\n👋 Bot stopped by user")
     finally:
+        # Clean shutdown
         await app.updater.stop()
         await app.stop()
         await app.shutdown()
