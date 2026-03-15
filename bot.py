@@ -11,6 +11,7 @@ import asyncio
 import re
 import json
 import urllib.parse
+import sys
 
 # Load environment variables
 env_path = Path(__file__).parent / '.env'
@@ -206,6 +207,7 @@ def clear_telegram_webhook():
         response = requests.post(webhook_url)
         print(f"✅ Webhook cleared: {response.json()}")
         
+        # Also clear any pending updates
         get_updates_url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
         requests.post(get_updates_url, json={"offset": -1, "timeout": 0})
         print("✅ Pending updates cleared")
@@ -242,26 +244,36 @@ async def delete_user_command(context: ContextTypes.DEFAULT_TYPE):
     if job and job.data:
         try:
             await context.bot.delete_message(chat_id=job.chat_id, message_id=job.data)
+            logger.info(f"✅ Deleted command message {job.data}")
         except Exception as e:
             logger.error(f"Failed to delete command: {e}")
 
 def schedule_command_deletion(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int = 3):
     """Schedule the user's command message for deletion"""
-    # Check if job_queue exists
-    if context.job_queue:
-        context.job_queue.run_once(
-            delete_user_command,
-            delay,
-            data=message_id,
-            chat_id=chat_id,
-            name=f"delete_cmd_{message_id}"
-        )
+    try:
+        # Check if job_queue exists and is properly initialized
+        if context.job_queue:
+            context.job_queue.run_once(
+                delete_user_command,
+                delay,
+                data=message_id,
+                chat_id=chat_id,
+                name=f"delete_cmd_{message_id}"
+            )
+            logger.info(f"✅ Scheduled deletion for message {message_id}")
+        else:
+            logger.warning("⚠️ JobQueue not available, cannot schedule deletion")
+    except Exception as e:
+        logger.error(f"Error scheduling deletion: {e}")
 
 # ==================== AUTHORIZATION DECORATOR ====================
 
 def authorized_only(func):
     """Decorator to restrict access to authorized users only"""
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        if not update or not update.effective_user:
+            return
+            
         user_id = update.effective_user.id
         
         # Check if user is authorized
@@ -953,8 +965,17 @@ async def run_bot():
     print("✅ Friendly messages - no scary links")
     print("=" * 50)
     
+    # Clear any existing webhooks again before starting
+    clear_telegram_webhook()
+    
     # Create application with job queue enabled
     app = Application.builder().token(TOKEN).build()
+    
+    # Verify job queue is initialized
+    if app.job_queue:
+        print("✅ JobQueue initialized successfully")
+    else:
+        print("⚠️ Warning: JobQueue not initialized")
     
     # Add handlers
     app.add_handler(CommandHandler("start", start))
@@ -970,7 +991,7 @@ async def run_bot():
     await app.initialize()
     await app.start()
     
-    # Start polling
+    # Start polling with explicit job queue support
     await app.updater.start_polling(
         drop_pending_updates=True,
         allowed_updates=['message', 'callback_query']
@@ -987,11 +1008,15 @@ async def run_bot():
             await asyncio.sleep(1)
     except KeyboardInterrupt:
         print("\n👋 Bot stopped by user")
+    except Exception as e:
+        print(f"❌ Error in main loop: {e}")
     finally:
         # Clean shutdown
+        print("🛑 Shutting down...")
         await app.updater.stop()
         await app.stop()
         await app.shutdown()
+        print("✅ Shutdown complete")
 
 def main():
     """Main entry point"""
@@ -1001,6 +1026,7 @@ def main():
         print("\n👋 Bot stopped")
     except Exception as e:
         print(f"❌ Error: {e}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
