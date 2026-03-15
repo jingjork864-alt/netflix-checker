@@ -18,11 +18,14 @@ load_dotenv(dotenv_path=env_path)
 
 # ==================== YOUR API CONFIGURATION ====================
 TOKEN = os.getenv('BOT_TOKEN')
-API_URL = "http://104.223.121.139:6969/api/gen"  # YOUR API (FIXED - no extra /api/gen)
+API_URL = "http://104.223.121.139:6969/api/gen"  # YOUR API
 SECRET_KEY = "IpYDCxU9VAxqi88ByaVscqTNDJPg7Cg5"  # YOUR SECRET KEY
 
 # YOUR CREDIT
 YOUR_CREDIT = "@CrackByLIM"
+
+# ==================== AUTHORIZED USERS ====================
+AUTHORIZED_USERS = [1058484190, 6247762383]  # Only these users can use the bot
 
 if not TOKEN:
     print("❌ ERROR: BOT_TOKEN not found!")
@@ -51,7 +54,7 @@ LANGUAGES = {
         'quality': 'Quality',
         'streams': 'Max Streams',
         'login_link': 'Login Link',
-        'launch': '🎬 LAUNCH NETFLIX',
+        'launch': '🎬 OPEN IN BROWSER',
         'powered_by': 'Powered by',
         'file_received': 'FILE RECEIVED',
         'analyzing': 'ANALYZING FILE',
@@ -72,11 +75,12 @@ LANGUAGES = {
         'check_command': 'Check Single Netflix ID',
         'enter_cookie': 'Please enter a Netflix ID to check',
         'checking': 'CHECKING NETFLIX ID',
-        'cookie_valid': 'VALID NETFLIX ID',
-        'cookie_invalid': 'INVALID NETFLIX ID',
-        'extracted_id': 'Extracted Netflix ID',
-        'how_to_use_check': 'HOW TO USE /check',
-        'cookie_example': 'Example',
+        'cookie_valid': '✅ VALID NETFLIX ID',
+        'cookie_invalid': '❌ INVALID NETFLIX ID',
+        'how_to_use': 'HOW TO USE',
+        'instruction': 'Just copy the link and open it in your browser!',
+        'unauthorized': '⛔ UNAUTHORIZED ACCESS',
+        'no_permission': 'You are not authorized to use this bot.',
     },
     'zh': {
         'name': '中文',
@@ -98,7 +102,7 @@ LANGUAGES = {
         'quality': '画质',
         'streams': '最大流',
         'login_link': '登录链接',
-        'launch': '🎬 启动NETFLIX',
+        'launch': '🎬 在浏览器中打开',
         'powered_by': '技术支持',
         'file_received': '已接收文件',
         'analyzing': '分析文件中',
@@ -119,11 +123,12 @@ LANGUAGES = {
         'check_command': '检查单个Netflix ID',
         'enter_cookie': '请输入要检查的Netflix ID',
         'checking': '正在检查NETFLIX ID',
-        'cookie_valid': 'NETFLIX ID有效',
-        'cookie_invalid': 'NETFLIX ID无效',
-        'extracted_id': '提取的Netflix ID',
-        'how_to_use_check': '如何使用 /check',
-        'cookie_example': '示例',
+        'cookie_valid': '✅ NETFLIX ID有效',
+        'cookie_invalid': '❌ NETFLIX ID无效',
+        'how_to_use': '使用方法',
+        'instruction': '复制链接并在浏览器中打开！',
+        'unauthorized': '⛔ 未经授权的访问',
+        'no_permission': '您无权使用此机器人。',
     },
     'km': {
         'name': 'ខ្មែរ',
@@ -145,7 +150,7 @@ LANGUAGES = {
         'quality': 'គុណភាព',
         'streams': 'ស្ទ្រីមអតិបរមា',
         'login_link': 'តំណចូល',
-        'launch': '🎬 ចូល NETFLIX',
+        'launch': '🎬 បើកក្នុងកម្មវិធីរុករក',
         'powered_by': 'ដំណើរការដោយ',
         'file_received': 'បានទទួលឯកសារ',
         'analyzing': 'កំពុងវិភាគឯកសារ',
@@ -166,13 +171,50 @@ LANGUAGES = {
         'check_command': 'ពិនិត្យ Netflix ID តែមួយ',
         'enter_cookie': 'សូមបញ្ចូល Netflix ID ដើម្បីពិនិត្យ',
         'checking': 'កំពុងពិនិត្យ NETFLIX ID',
-        'cookie_valid': 'NETFLIX ID ត្រឹមត្រូវ',
-        'cookie_invalid': 'NETFLIX ID មិនត្រឹមត្រូវ',
-        'extracted_id': 'Netflix ID ដែលបានទាញយក',
-        'how_to_use_check': 'របៀបប្រើ /check',
-        'cookie_example': 'ឧទាហរណ៍',
+        'cookie_valid': '✅ NETFLIX ID ត្រឹមត្រូវ',
+        'cookie_invalid': '❌ NETFLIX ID មិនត្រឹមត្រូវ',
+        'how_to_use': 'របៀបប្រើ',
+        'instruction': 'គ្រាន់តែចម្លងតំណ ហើយបើកក្នុងកម្មវិធីរុករករបស់អ្នក!',
+        'unauthorized': '⛔ គ្មានការអនុញ្ញាត',
+        'no_permission': 'អ្នកមិនត្រូវបានអនុញ្ញាតឱ្យប្រើប្រាស់ម៉ាស៊ីននេះទេ។',
     }
 }
+
+# ==================== AUTHORIZATION DECORATOR ====================
+
+def authorized_only(func):
+    """Decorator to restrict access to authorized users only"""
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        
+        # Check if user is authorized
+        if user_id not in AUTHORIZED_USERS:
+            lang_code = get_lang(user_id)
+            lang = LANGUAGES[lang_code]
+            
+            # Log unauthorized access attempt
+            logger.warning(f"🚫 Unauthorized access attempt by user ID: {user_id} (@{update.effective_user.username})")
+            
+            # Send unauthorized message
+            await update.message.reply_text(
+                f"""
+╔══════════════════════════════════════════╗
+║     **{lang['unauthorized']}**     ║
+╚══════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔒 **{lang['no_permission']}**
+
+📌 **Your User ID:** `{user_id}`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                """,
+                parse_mode='Markdown'
+            )
+            return
+        
+        # User is authorized, proceed with the original function
+        return await func(update, context, *args, **kwargs)
+    return wrapper
 
 # ==================== FIX FOR CONFLICT ERROR ====================
 def clear_telegram_webhook():
@@ -370,10 +412,10 @@ def parse_account_line(line):
         logger.debug(f"Problem line: {line[:200]}...")
         return None
 
-# ==================== YOUR API FUNCTIONS (FIXED) ====================
+# ==================== YOUR API FUNCTIONS ====================
 
 async def check_with_your_api(netflix_id, email="unknown@email.com"):
-    """Check Netflix ID using YOUR API - EXACTLY as per documentation"""
+    """Check Netflix ID using YOUR API"""
     
     if not netflix_id:
         return {
@@ -384,10 +426,10 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
         }
     
     try:
-        # API endpoint - exactly as specified in documentation
+        # API endpoint
         url = "http://104.223.121.139:6969/api/gen"
         
-        # Data payload exactly as your API expects
+        # Data payload
         data = {
             "netflix_id": netflix_id,
             "secret_key": SECRET_KEY
@@ -396,13 +438,13 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
         logger.info(f"📡 Calling API for {email}")
         logger.info(f"🔑 Netflix ID: {netflix_id[:50]}...")
         
-        # Make the POST request exactly as in the example
+        # Make the POST request
         response = requests.post(url, json=data, timeout=15)
         result = response.json()
         
         logger.info(f"📥 API Response: {result}")
         
-        # Check if API call was successful (exactly as in the example)
+        # Check if API call was successful
         if result.get('success'):
             login_url = result.get('login_url')
             if login_url:
@@ -416,12 +458,12 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
             else:
                 return {
                     "success": False,
-                    "error": "API returned success but no login URL",
+                    "error": "No login URL generated",
                     "error_code": "MISSING_URL",
                     "email": email
                 }
         else:
-            # Get error message (exactly as in the example: r.get('error'))
+            # Get error message
             error_msg = result.get('error', 'Unknown error')
             error_code = result.get('error_code', 'UNKNOWN_ERROR')
             
@@ -437,14 +479,14 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
     except requests.exceptions.Timeout:
         return {
             "success": False,
-            "error": "API request timed out",
+            "error": "Request timed out",
             "error_code": "TIMEOUT",
             "email": email
         }
     except requests.exceptions.ConnectionError:
         return {
             "success": False,
-            "error": "Cannot connect to API server",
+            "error": "Cannot connect to server",
             "error_code": "CONNECTION_ERROR",
             "email": email
         }
@@ -460,6 +502,10 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
 
 async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show language selection menu"""
+    # Check authorization
+    if update.effective_user.id not in AUTHORIZED_USERS:
+        return
+    
     keyboard = [
         [
             InlineKeyboardButton(f"{LANGUAGES['en']['flag']} English", callback_data='lang_en'),
@@ -480,6 +526,11 @@ async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle language selection"""
+    # Check authorization
+    if update.effective_user.id not in AUTHORIZED_USERS:
+        await update.callback_query.answer("⛔ Unauthorized")
+        return
+    
     query = update.callback_query
     await query.answer()
     
@@ -507,6 +558,7 @@ def get_lang(user_id):
 
 # ==================== BOT COMMANDS ====================
 
+@authorized_only
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command with multi-language support"""
     user = update.effective_user
@@ -536,7 +588,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ Real-time progress tracking
 ✅ Detailed statistics
 ✅ Supports multiple formats
-✅ **NEW: /check command for single Netflix ID validation**
+✅ **/check command for single Netflix ID**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Commands:**
@@ -553,6 +605,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(welcome, parse_mode='Markdown')
 
+@authorized_only
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Help command with multi-language support"""
     user_id = update.effective_user.id
@@ -565,32 +618,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ╚══════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 **HOW TO USE / 使用方法 / របៀបប្រើ**
+📁 **HOW TO USE**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1️⃣ **Upload .txt file** with multiple accounts
 2️⃣ **OR use /check command** for single Netflix ID
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔍 **{lang['how_to_use_check']}:**
+🔍 **{lang['how_to_use']} /check:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `/check YOUR_NETFLIX_ID`
 
-{lang['cookie_example']}:
-`/check v%3D3%26ct%3DBgjHlOvcAxL7...`
-
-✅ **You can use either:**
-• Full cookie: `NetflixId=v%3D3%26ct%3D...`
-• Just the value: `v%3D3%26ct%3D...`
+📝 **Examples:**
+• `/check v%3D3%26ct%3DBgjHlOvcAxL7...`
+• `/check NetflixId=v%3D3%26ct%3DBgjHlOvcAxL7...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 **Error Codes / 错误代码 / លេខកូដកំហុស:**
+📊 **Common Issues:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• `MISSING_NETFLIX_ID` - No Netflix ID provided
-• `INVALID_NETFLIX_ID` - Netflix ID is invalid or expired
-• `MISSING_SECRET_KEY` - API configuration error
-• `INVALID_SECRET_KEY` - Invalid API credentials
-• `MAINTENANCE_MODE` - System under maintenance
+• `INVALID_NETFLIX_ID` - Netflix ID is expired
+• `TIMEOUT` - Server busy, try again
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
@@ -599,6 +646,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
+@authorized_only
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show statistics with multi-language support"""
     global total_checks, valid_accounts, invalid_accounts
@@ -630,6 +678,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(stats_text, parse_mode='Markdown')
 
+@authorized_only
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Clear user session"""
     user_id = update.effective_user.id
@@ -646,8 +695,9 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
-# ==================== CHECK COMMAND (FIXED) ====================
+# ==================== CHECK COMMAND ====================
 
+@authorized_only
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Check a single Netflix ID manually"""
     user_id = update.effective_user.id
@@ -716,13 +766,11 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ⏳ **Status:** Validating...
 🔑 **Netflix ID:** `{netflix_id[:50]}...`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
         """,
         parse_mode='Markdown'
     )
     
-    # Check with API using the exact format from the documentation
+    # Check with API
     result = await check_with_your_api(netflix_id, f"manual_{netflix_id[:8]}")
     
     total_checks += 1
@@ -730,7 +778,7 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if result.get('success'):
         valid_accounts += 1
         
-        # Success message
+        # Success message with instruction
         success_msg = f"""
 ╔══════════════════════════════════════════╗
 ║     ✅ **{lang['cookie_valid']}** ✅     ║
@@ -745,7 +793,11 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `{result['login_url']}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✨ **{lang['powered_by']} {YOUR_CREDIT}** ✨
+📌 **{lang['instruction']}**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """
         
         keyboard = [[InlineKeyboardButton(lang['launch'], url=result['login_url'])]]
@@ -757,7 +809,7 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         invalid_accounts += 1
         
-        # Error message
+        # Error message (no API mention)
         error_msg = f"""
 ╔══════════════════════════════════════════╗
 ║     ❌ **{lang['cookie_invalid']}** ❌     ║
@@ -767,11 +819,10 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔑 **Netflix ID:**
 `{netflix_id[:50]}...`
 
-❌ **Error:** {result.get('error', 'Unknown error')}
-📋 **Error Code:** `{result.get('error_code', 'UNKNOWN')}`
+❌ **Error:** The Netflix ID is invalid or expired
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 **Note:** The Netflix ID may be expired or invalid
+💡 Please check your Netflix ID and try again
 
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -779,8 +830,9 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await checking_msg.edit_text(error_msg, parse_mode='Markdown')
 
-# ==================== FILE HANDLER WITH MULTI-LANGUAGE ====================
+# ==================== FILE HANDLER ====================
 
+@authorized_only
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle uploaded .txt files with beautiful output"""
     user_id = update.effective_user.id
@@ -816,8 +868,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📄 **File:** `{document.file_name}`
 ⏳ **Status:** Downloading...
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
         """,
         parse_mode='Markdown'
     )
@@ -841,8 +891,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📄 **File:** `{document.file_name}`
 🔍 **Accounts Found:** `{len(accounts)}`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
             """,
             parse_mode='Markdown'
         )
@@ -880,8 +928,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ **{lang['valid_found']}:** `{valid_count}`
 ❌ **{lang['invalid_found']}:** `{invalid_count}`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
                     """,
                     parse_mode='Markdown'
                 )
@@ -932,7 +978,10 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔗 **{lang['login_link']}:**
 `{result['login_url']}`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📌 **{lang['instruction']}**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ **{lang['powered_by']} {YOUR_CREDIT}** ✨
                 """
                 
@@ -968,6 +1017,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Valid accounts have been sent above!**
+📌 **{lang['instruction']}**
 
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -982,16 +1032,9 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📊 **{lang['results']}:**
 
 ❌ **{lang['invalid_found']}:** `{invalid_count}`
-📈 **Error Breakdown:**
 
-"""
-            for error, count in error_counts.items():
-                summary += f"   • `{error}`: {count}\n"
-            
-            summary += f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 **Note:** 'INVALID_NETFLIX_ID' means
-    the Netflix ID has expired.
+💡 **Note:** All Netflix IDs may be expired
 
 ⚡ **{lang['powered_by']} {YOUR_CREDIT}** ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1008,7 +1051,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ╚══════════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ **Error:** `{str(e)[:100]}`
+❌ **Error:** An error occurred while processing
 
 💡 Please try again or check file format
 
@@ -1036,18 +1079,18 @@ async def run_bot():
     print("🎬 NETFLIX PREMIUM CHECKER BOT")
     print("=" * 60)
     print(f"✅ Bot Token: {TOKEN[:10]}...")
-    print(f"✅ API URL: http://104.223.121.139:6969/api/gen")
-    print(f"✅ Credit: {YOUR_CREDIT}")
+    print(f"✅ Authorized Users: {len(AUTHORIZED_USERS)}")
+    for uid in AUTHORIZED_USERS:
+        print(f"   • User ID: {uid}")
     print("=" * 60)
     print("🌐 Languages: English, 中文, ខ្មែរ")
-    print("📁 Supports multiple formats")
-    print("🔍 /check command for single Netflix ID")
+    print("🔒 Private bot - authorized users only")
     print("🎨 Beautiful Premium Output")
     print("=" * 60)
     
     app = Application.builder().token(TOKEN).build()
     
-    # Add handlers
+    # Add handlers (no decorator needed here, we use the decorator on the functions)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("stats", stats_command))
@@ -1061,7 +1104,7 @@ async def run_bot():
     await app.start()
     await app.updater.start_polling(drop_pending_updates=True)
     
-    print("✅ Bot is running! Send a .txt file or use /check command to test.")
+    print("✅ Bot is running! Only authorized users can access.")
     print("=" * 60)
     
     try:
