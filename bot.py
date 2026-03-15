@@ -64,6 +64,10 @@ LANGUAGES = {
         'rate_limit': 'Rate limit exceeded',
         'wrong_format': 'Please upload a .txt file',
         'no_cookies': 'No Netflix cookies found',
+        'member_since': 'Member Since',
+        'payment_method': 'Payment Method',
+        'next_billing': 'Next Billing',
+        'extra_member': 'Extra Member',
     },
     'zh': {
         'name': '中文',
@@ -99,6 +103,10 @@ LANGUAGES = {
         'rate_limit': '请求过多，请稍后再试',
         'wrong_format': '请上传.txt文件',
         'no_cookies': '未找到Netflix cookies',
+        'member_since': '加入时间',
+        'payment_method': '支付方式',
+        'next_billing': '下次计费',
+        'extra_member': '额外成员',
     },
     'km': {
         'name': 'ខ្មែរ',
@@ -134,6 +142,10 @@ LANGUAGES = {
         'rate_limit': 'សំណើច្រើនពេក សូមរង់ចាំ',
         'wrong_format': 'សូមផ្ញើឯកសារ .txt',
         'no_cookies': 'រកមិនឃើញ Netflix cookies ទេ',
+        'member_since': 'សមាជិកតាំងពី',
+        'payment_method': 'វិធីបង់ប្រាក់',
+        'next_billing': 'វិក្កយបត្របន្ទាប់',
+        'extra_member': 'សមាជិកបន្ថែម',
     }
 }
 
@@ -173,12 +185,19 @@ total_checks = 0
 valid_accounts = 0
 invalid_accounts = 0
 
-# ==================== EXACT FORMAT PARSER ====================
+# ==================== ENHANCED FORMAT PARSER ====================
 
 def parse_account_line(line):
     """
-    Parse a single line in the exact format:
+    Parse a single line in either format:
+    
+    Format 1 (old): 
     email:password | Phone: number | Country: name | Cookie: NetflixId=...
+    
+    Format 2 (new):
+    email:password | Country = United States 🇺🇸 | PhoneNumber = 123-456-7890 | 
+    MemberSince = January/2021 | Plan = Premium | VideoQuality = UHD | 
+    MaxStreams = 4 | NetflixCookies = NetflixId=v%3D3%26ct%3D...
     """
     try:
         line = line.strip()
@@ -187,48 +206,116 @@ def parse_account_line(line):
         
         account = {}
         
-        # Split by | to get each field
-        fields = line.split('|')
+        # First, extract email:password from the beginning
+        # Both formats start with email:password
+        parts = line.split('|', 1)
+        first_part = parts[0].strip()
         
-        # First field contains email:password
-        first_field = fields[0].strip()
-        if ':' in first_field:
-            email_pass = first_field.split(':', 1)
+        # Parse email:password
+        if ':' in first_part:
+            email_pass = first_part.split(':', 1)
             account['email'] = email_pass[0].strip()
             account['password'] = email_pass[1].strip()
+        else:
+            # Try to find email:password even without proper format
+            email_pass_match = re.search(r'([^\s:]+):([^\s|]+)', first_part)
+            if email_pass_match:
+                account['email'] = email_pass_match.group(1).strip()
+                account['password'] = email_pass_match.group(2).strip()
         
-        # Parse remaining fields
-        for field in fields[1:]:
-            field = field.strip()
-            if ':' in field:
-                key, value = field.split(':', 1)
-                key = key.strip().lower()
-                value = value.strip()
-                
-                if 'phone' in key:
-                    account['phone'] = value
-                elif 'country' in key:
-                    account['country'] = value
-                elif 'cookie' in key:
-                    account['full_cookie'] = value
-                    # Extract NetflixId from cookie
-                    netflix_match = re.search(r'NetflixId=([^&\s]+)', value)
-                    if netflix_match:
-                        account['netflix_id'] = netflix_match.group(1).strip()
+        # If we have more parts after the first |
+        if len(parts) > 1:
+            remaining = parts[1]
+            
+            # Check which format we're dealing with
+            if '=' in remaining and ':' not in remaining:
+                # Format 2: Using = as separator
+                fields = remaining.split('|')
+                for field in fields:
+                    field = field.strip()
+                    if '=' in field:
+                        key, value = field.split('=', 1)
+                        key = key.strip()
+                        value = value.strip()
+                        
+                        # Normalize keys
+                        key_lower = key.lower()
+                        
+                        if 'phonenumber' in key_lower or 'phone' in key_lower:
+                            account['phone'] = value
+                        elif 'country' in key_lower:
+                            account['country'] = value
+                        elif 'plan' in key_lower:
+                            account['plan'] = value
+                        elif 'videoquality' in key_lower or 'quality' in key_lower:
+                            account['quality'] = value
+                        elif 'maxstreams' in key_lower or 'streams' in key_lower:
+                            account['streams'] = value
+                        elif 'netflixcookies' in key_lower or 'cookie' in key_lower or 'netflixid' in key_lower:
+                            account['full_cookie'] = value
+                            # Extract NetflixId from cookie
+                            netflix_match = re.search(r'NetflixId=([^&\s]+)', value)
+                            if netflix_match:
+                                account['netflix_id'] = netflix_match.group(1).strip()
+                        elif 'membersince' in key_lower:
+                            account['member_since'] = value
+                        elif 'paymentmethod' in key_lower:
+                            account['payment_method'] = value
+                        elif 'extramember' in key_lower:
+                            account['extra_member'] = value
+                        elif 'nextbillingdate' in key_lower:
+                            account['next_billing'] = value
+            
+            else:
+                # Format 1: Using : as separator (original format)
+                fields = remaining.split('|')
+                for field in fields:
+                    field = field.strip()
+                    if ':' in field:
+                        key, value = field.split(':', 1)
+                        key = key.strip().lower()
+                        value = value.strip()
+                        
+                        if 'phone' in key:
+                            account['phone'] = value
+                        elif 'country' in key:
+                            account['country'] = value
+                        elif 'cookie' in key:
+                            account['full_cookie'] = value
+                            # Extract NetflixId from cookie
+                            netflix_match = re.search(r'NetflixId=([^&\s]+)', value)
+                            if netflix_match:
+                                account['netflix_id'] = netflix_match.group(1).strip()
+        
+        # If we still don't have netflix_id, try to find it anywhere in the line
+        if 'netflix_id' not in account:
+            # Search for NetflixId pattern anywhere in the line
+            netflix_match = re.search(r'NetflixId=([^&\s|]+)', line)
+            if netflix_match:
+                account['netflix_id'] = netflix_match.group(1).strip()
+                # Also try to extract email if we don't have it
+                if 'email' not in account:
+                    email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', line)
+                    if email_match:
+                        account['email'] = email_match.group(1)
         
         # Validate we have the minimum required fields
         if 'netflix_id' not in account:
             logger.warning("❌ No NetflixId found in line")
+            logger.debug(f"Line content: {line[:200]}...")
             return None
         
+        # Ensure we have an email (use placeholder if not found)
         if 'email' not in account:
             account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
+            account['password'] = "N/A"
         
         logger.info(f"✅ Parsed account: {account['email']}")
         return account
         
     except Exception as e:
         logger.error(f"Error parsing line: {e}")
+        logger.debug(f"Problem line: {line[:200]}...")
         return None
 
 # ==================== YOUR API FUNCTIONS ====================
@@ -401,7 +488,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 📤 **Send a .txt file** with accounts in this format:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`email:password | Phone: XXX | Country: XXX | Cookie: NetflixId=...`
+`email:password | Country = USA | PhoneNumber = 123456 | NetflixCookies = NetflixId=...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ **Features:**
@@ -410,6 +497,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ✅ Beautiful premium output
 ✅ Real-time progress tracking
 ✅ Detailed statistics
+✅ Supports multiple formats
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 **Commands:**
@@ -443,15 +531,20 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 1️⃣ **Prepare your .txt file**
    • One account per line
    • Use | to separate fields
-   • Must include Cookie: NetflixId=...
+   • Must include NetflixId in cookies
 
-2️⃣ **Format:**
+2️⃣ **Supported Formats:**
+
+📌 **Format 1 (with :):**
 `email:password | Phone: number | Country: name | Cookie: NetflixId=...`
+
+📌 **Format 2 (with =):**
+`email:password | Country = USA | PhoneNumber = 123456 | Plan = Premium | VideoQuality = UHD | MaxStreams = 4 | NetflixCookies = NetflixId=...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📝 **Example / 例子 / ឧទាហរណ៍:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`user@gmail.com:pass123 | Phone: 123-456-7890 | Country: Philippines | Cookie: NetflixId=v%3D3%26ct%3D...`
+`user@gmail.com:pass123 | Country = United States 🇺🇸 | PhoneNumber = 123-456-7890 | Plan = Premium | VideoQuality = UHD | MaxStreams = 4 | NetflixCookies = NetflixId=v%3D3%26ct%3D...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 **Error Messages / 错误信息 / សារកំហុស:**
@@ -630,7 +723,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 valid_count += 1
                 valid_accounts += 1
                 
-                # Beautiful valid account output
+                # Beautiful valid account output with all available details
                 details = []
                 if account.get('country'):
                     details.append(f"🌍 **{lang['country']}:** `{account['country']}`")
@@ -638,6 +731,18 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     details.append(f"📞 **{lang['phone']}:** `{account['phone']}`")
                 if account.get('plan'):
                     details.append(f"📺 **{lang['plan']}:** `{account['plan']}`")
+                if account.get('quality'):
+                    details.append(f"🎨 **{lang['quality']}:** `{account['quality']}`")
+                if account.get('streams'):
+                    details.append(f"📱 **{lang['streams']}:** `{account['streams']}`")
+                if account.get('member_since'):
+                    details.append(f"📅 **{lang['member_since']}:** `{account['member_since']}`")
+                if account.get('payment_method'):
+                    details.append(f"💳 **{lang['payment_method']}:** `{account['payment_method']}`")
+                if account.get('next_billing'):
+                    details.append(f"⏰ **{lang['next_billing']}:** `{account['next_billing']}`")
+                if account.get('extra_member'):
+                    details.append(f"👥 **{lang['extra_member']}:** `{account['extra_member']}`")
                 
                 details_str = '\n'.join(details) if details else ''
                 
@@ -763,6 +868,7 @@ async def run_bot():
     print(f"✅ Credit: {YOUR_CREDIT}")
     print("=" * 60)
     print("🌐 Languages: English, 中文, ខ្មែរ")
+    print("📁 Supports multiple formats")
     print("🎨 Beautiful Premium Output")
     print("=" * 60)
     
