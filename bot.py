@@ -203,20 +203,15 @@ def extract_netflix_id_from_cookie(cookie_text):
             logger.info(f"Extracted Netflix ID from ct%3D format: {netflix_id[:50]}...")
             return netflix_id
     
-    # Pattern 3: URL encoded format
+    # Pattern 3: URL encoded format with v%3D3%26ct%3D
     match = re.search(r'(v%3D3%26ct%3D[^&\n|]+)', cookie_text, re.IGNORECASE)
     if match:
         netflix_id = match.group(1).strip()
         logger.info(f"Extracted Netflix ID from v%3D3%26ct%3D format: {netflix_id[:50]}...")
         return netflix_id
     
-    # Pattern 4: If it's already a Netflix ID string (contains %3D)
-    if '%3D' in cookie_text and len(cookie_text) > 50:
-        logger.info(f"Using full cookie as Netflix ID: {cookie_text[:50]}...")
-        return cookie_text
-    
     # If nothing matches, try to see if it's just the raw value
-    if len(cookie_text) > 100 and '=' not in cookie_text:
+    if len(cookie_text) > 100:
         logger.info(f"Using raw text as Netflix ID: {cookie_text[:50]}...")
         return cookie_text
     
@@ -325,10 +320,10 @@ def parse_account_line(line):
         logger.error(f"Error parsing line: {e}")
         return None
 
-# ==================== UPDATED API FUNCTIONS WITH MOBILE SUPPORT ====================
+# ==================== FIXED API FUNCTIONS - HANDLES ANY RESPONSE FORMAT ====================
 
 async def check_with_your_api(netflix_id, email="unknown@email.com"):
-    """Check Netflix ID using YOUR API - Now returns both PC and Phone URLs"""
+    """Check Netflix ID using YOUR API - Handles multiple response formats"""
     
     if not netflix_id:
         return {
@@ -346,45 +341,126 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
             "secret_key": SECRET_KEY
         }
         
-        logger.info(f"📡 Calling API for {email} with Netflix ID: {netflix_id[:50]}...")
+        logger.info(f"📡 Calling API for {email}")
+        logger.info(f"📡 Netflix ID: {netflix_id[:100]}...")
         
         response = requests.post(url, json=data, timeout=15)
-        result = response.json()
         
-        logger.info(f"API Response: {result}")
+        # Log raw response for debugging
+        logger.info(f"📡 Response Status: {response.status_code}")
+        logger.info(f"📡 Response Text: {response.text[:500]}")
         
-        if result.get('success'):
-            login_url = result.get('login_url')
-            phone_url = result.get('phone_url')  # New field for phone URL
+        # Try to parse JSON
+        try:
+            result = response.json()
+        except:
+            logger.error(f"Failed to parse JSON response: {response.text}")
+            return {
+                "success": False,
+                "error": "Invalid API response format",
+                "error_code": "INVALID_RESPONSE",
+                "email": email
+            }
+        
+        # Check if the response indicates success
+        # Handle different possible response structures
+        
+        # Case 1: Response has 'success' field
+        if result.get('success') == True:
+            # Try to get URLs from various possible field names
+            login_url = result.get('login_url') or result.get('url') or result.get('link')
+            phone_url = result.get('phone_url') or result.get('mobile_url') or result.get('phone_link')
             
             if login_url:
                 return {
                     "success": True,
                     "login_url": login_url,
-                    "phone_url": phone_url,  # Add phone URL
+                    "phone_url": phone_url,
                     "email": email,
+                    "raw_response": result
                 }
             else:
                 return {
                     "success": False,
-                    "error": "No login URL generated",
+                    "error": "No login URL in response",
                     "error_code": "MISSING_URL",
                     "email": email
                 }
-        else:
-            error_msg = result.get('error', 'Invalid or expired')
+        
+        # Case 2: Response has 'status' field (alternative)
+        elif result.get('status') == 'success' or result.get('status') == 'ok':
+            login_url = result.get('login_url') or result.get('url') or result.get('link')
+            phone_url = result.get('phone_url') or result.get('mobile_url')
+            
+            if login_url:
+                return {
+                    "success": True,
+                    "login_url": login_url,
+                    "phone_url": phone_url,
+                    "email": email
+                }
+        
+        # Case 3: Response directly contains URLs (no success field)
+        elif result.get('login_url') or result.get('url'):
+            login_url = result.get('login_url') or result.get('url')
+            phone_url = result.get('phone_url') or result.get('mobile_url')
+            
+            return {
+                "success": True,
+                "login_url": login_url,
+                "phone_url": phone_url,
+                "email": email
+            }
+        
+        # Case 4: Response has 'error' field
+        elif result.get('error'):
             return {
                 "success": False,
-                "error": error_msg,
-                "error_code": result.get('error_code', 'INVALID'),
+                "error": result.get('error'),
+                "error_code": result.get('error_code', 'API_ERROR'),
+                "email": email
+            }
+        
+        # Case 5: Response has 'message' field
+        elif result.get('message'):
+            return {
+                "success": False,
+                "error": result.get('message'),
+                "error_code": 'API_MESSAGE',
+                "email": email
+            }
+        
+        # Case 6: Unknown format
+        else:
+            logger.warning(f"Unknown response format: {result}")
+            return {
+                "success": False,
+                "error": f"Unknown response format: {list(result.keys())}",
+                "error_code": "UNKNOWN_FORMAT",
                 "email": email
             }
                 
+    except requests.exceptions.Timeout:
+        logger.error("API request timeout")
+        return {
+            "success": False,
+            "error": "API request timeout",
+            "error_code": "TIMEOUT",
+            "email": email
+        }
+    except requests.exceptions.ConnectionError:
+        logger.error("API connection error")
+        return {
+            "success": False,
+            "error": "Cannot connect to API",
+            "error_code": "CONNECTION_ERROR",
+            "email": email
+        }
     except Exception as e:
         logger.error(f"Error checking Netflix ID: {e}")
         return {
             "success": False,
-            "error": "Service unavailable",
+            "error": f"Service error: {str(e)[:50]}",
             "error_code": "ERROR",
             "email": email
         }
