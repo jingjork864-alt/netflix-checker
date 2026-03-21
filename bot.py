@@ -294,10 +294,10 @@ def parse_account_line(line):
         logger.error(f"Error parsing line: {e}")
         return None
 
-# ==================== YOUR API FUNCTIONS ====================
+# ==================== UPDATED API FUNCTIONS WITH MOBILE SUPPORT ====================
 
 async def check_with_your_api(netflix_id, email="unknown@email.com"):
-    """Check Netflix ID using YOUR API"""
+    """Check Netflix ID using YOUR API - Now returns both PC and Phone URLs"""
     
     if not netflix_id:
         return {
@@ -322,10 +322,13 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
         
         if result.get('success'):
             login_url = result.get('login_url')
+            phone_url = result.get('phone_url')  # New field for phone URL
+            
             if login_url:
                 return {
                     "success": True,
                     "login_url": login_url,
+                    "phone_url": phone_url,  # Add phone URL
                     "email": email,
                 }
             else:
@@ -345,6 +348,7 @@ async def check_with_your_api(netflix_id, email="unknown@email.com"):
             }
                 
     except Exception as e:
+        logger.error(f"Error checking Netflix ID: {e}")
         return {
             "success": False,
             "error": "Service unavailable",
@@ -503,11 +507,11 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
-# ==================== CHECK COMMAND (UPDATED VERSION) ====================
+# ==================== UPDATED CHECK COMMAND WITH MOBILE SUPPORT ====================
 
 @authorized_only
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Check a single Netflix ID"""
+    """Check a single Netflix ID - Now with mobile support"""
     user_id = update.effective_user.id
     lang_code = get_lang(user_id)
     lang = LANGUAGES[lang_code]
@@ -567,7 +571,10 @@ Example:
         
         short_id = netflix_id[:15] + "..." if len(netflix_id) > 15 else netflix_id
         
-        # UPDATED: Cleaner output with "Here is your Netflix Account" and login link visible
+        # Get phone URL (fallback to PC URL if not available)
+        phone_url = result.get('phone_url', result['login_url'])
+        
+        # Updated success message with both options
         success_msg = f"""
 ╔══════════════════════════════════════╗
 ║     ✅ **NETFLIX ACCOUNT** ✅        ║
@@ -576,20 +583,24 @@ Example:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔑 **Code:** `{short_id}`
 
-🔗 **Login Link:**
+📱 **Phone Login URL:**
+`{phone_url}`
+
+💻 **PC Login URL:**
 `{result['login_url']}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👇 Click the button below to open
+👇 Click the buttons below to open
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ {YOUR_CREDIT} ✨
         """
         
-        keyboard = [[InlineKeyboardButton(
-            "🎬 OPEN NETFLIX", 
-            url=result['login_url']
-        )]]
+        # Create buttons for both platforms
+        keyboard = [
+            [InlineKeyboardButton("📱 OPEN ON MOBILE", url=phone_url)],
+            [InlineKeyboardButton("💻 OPEN ON PC", url=result['login_url'])]
+        ]
         
         await update.message.reply_text(
             success_msg,
@@ -621,11 +632,11 @@ Example:
         
         await update.message.reply_text(error_msg, parse_mode='Markdown')
 
-# ==================== FILE HANDLER ====================
+# ==================== UPDATED FILE HANDLER WITH MOBILE SUPPORT ====================
 
 @authorized_only
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle uploaded .txt files"""
+    """Handle uploaded .txt files - Now with mobile support"""
     user_id = update.effective_user.id
     lang_code = get_lang(user_id)
     lang = LANGUAGES[lang_code]
@@ -700,7 +711,10 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 details_str = ' | '.join(details) if details else ''
                 
-                # UPDATED: Cleaner output for file results
+                # Get phone URL (fallback to PC URL if not available)
+                phone_url = result.get('phone_url', result['login_url'])
+                
+                # Updated valid message with both options
                 valid_msg = f"""
 ╔══════════════════════════════════════╗
 ║     ✅ **NETFLIX ACCOUNT** ✅        ║
@@ -710,17 +724,21 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📧 **Email:** `{account['email']}`
 {details_str}
 
-🔗 **Login Link:**
+📱 **Phone URL:**
+`{phone_url}`
+
+💻 **PC URL:**
 `{result['login_url']}`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👇 Click the button below to open
+👇 Click the buttons below to open
                 """
                 
-                keyboard = [[InlineKeyboardButton(
-                    "🎬 OPEN NETFLIX", 
-                    url=result['login_url']
-                )]]
+                # Create buttons for both platforms
+                keyboard = [
+                    [InlineKeyboardButton("📱 OPEN ON MOBILE", url=phone_url)],
+                    [InlineKeyboardButton("💻 OPEN ON PC", url=result['login_url'])]
+                ]
                 
                 await update.message.reply_text(
                     valid_msg,
@@ -789,10 +807,11 @@ def check_rate_limit(user_id, limit=5, period=60):
 async def run_bot():
     """Run the bot"""
     print("=" * 50)
-    print("🎬 NETFLIX CHECKER BOT")
+    print("🎬 NETFLIX CHECKER BOT WITH MOBILE SUPPORT")
     print("=" * 50)
     print(f"✅ Authorized Users: {len(AUTHORIZED_USERS)}")
     print(f"✅ Credit: {YOUR_CREDIT}")
+    print(f"✅ Mobile Support: Enabled")
     print("=" * 50)
     
     clear_telegram_webhook()
@@ -819,7 +838,7 @@ async def run_bot():
         allowed_updates=['message', 'callback_query']
     )
     
-    print("✅ Bot is running!")
+    print("✅ Bot is running with Mobile Support!")
     print("=" * 50)
     
     try:
